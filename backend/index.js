@@ -43,3 +43,13 @@ pool.connect()
         console.error('❌ Failed to connect to PostgreSQL', err);
         process.exit(1); // exit if DB is not reachable
     });
+
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled redzhekšon:', err);
+    process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught eksepšon:', err);
+    process.exit(1);
+});
