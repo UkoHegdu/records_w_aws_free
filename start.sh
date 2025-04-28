@@ -67,8 +67,8 @@ echo "   docker-compose up -d"
 echo "2. Or start your application directly:"
 echo "   node index.js"
 
-# Start containers with BuildKit enabled
-DOCKER_BUILDKIT=1 docker-compose up -d
+# Start containers without BuildKit enabled
+docker-compose up -d
 
 # Verify containers are running
 echo ""
