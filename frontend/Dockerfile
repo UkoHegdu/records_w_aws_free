@@ -1,7 +1,7 @@
 # Stage 1: Build the frontend
 FROM node:22.15.0-alpine AS builder
 
-WORKDIR /app
+WORKDIR /
 COPY package*.json ./
 RUN npm install
 COPY . .

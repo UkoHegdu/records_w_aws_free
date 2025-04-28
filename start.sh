@@ -12,7 +12,7 @@ ENVIRONMENT=${1:-"prod"}  # Default to 'prod' if no argument provided
 AWS_REGION="eu-north-1"    # Change to your region
 
 # Fetch parameters from AWS SSM
-echo "🔍 Fetching parameters from AWS Parameter Store (/${APP_NAME}/${ENVIRONMENT}/)..."
+echo "🔍 Fetching parameters from AWS Parameter Store (/${ENVIRONMENT}/)..."
 
 # Get all parameters for this environment
 PARAMETERS=$(aws ssm get-parameters-by-path \
@@ -66,3 +66,11 @@ echo "1. Run your Docker commands:"
 echo "   docker-compose up -d"
 echo "2. Or start your application directly:"
 echo "   node index.js"
+
+# Start containers with BuildKit enabled
+DOCKER_BUILDKIT=1 docker-compose up -d
+
+# Verify containers are running
+echo ""
+echo "Container status:"
+docker-compose ps
