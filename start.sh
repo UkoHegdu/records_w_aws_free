@@ -7,7 +7,7 @@
 set -e  # Exit immediately if any command fails
 
 # Configuration
-APP_NAME="myapp"
+APP_NAME="recordsw"
 ENVIRONMENT=${1:-"prod"}  # Default to 'prod' if no argument provided
 AWS_REGION="eu-north-1"    # Change to your region
 
@@ -16,7 +16,7 @@ echo "🔍 Fetching parameters from AWS Parameter Store (/${APP_NAME}/${ENVIRONM
 
 # Get all parameters for this environment
 PARAMETERS=$(aws ssm get-parameters-by-path \
-  --path "/${APP_NAME}/${ENVIRONMENT}/" \
+  --path "/${ENVIRONMENT}/" \
   --region "$AWS_REGION" \
   --with-decryption \
   --query "Parameters[*].{Name:Name,Value:Value}")
