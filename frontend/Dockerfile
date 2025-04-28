@@ -1,22 +1,23 @@
-# Stage 1: Build the frontend
+# Stage 1: Builder
 FROM node:22.15.0-alpine AS builder
 
-WORKDIR /
+# Use /app to keep things organized (but could use / if you prefer)
+WORKDIR /app  
+
+# These will copy to /app/package.json etc.
 COPY package*.json ./
 RUN npm install
+
+# Copy everything to /app (including your root app.tsx)
 COPY . .
+
+# Build outputs to /app/dist (Vite's default relative to WORKDIR)
 RUN npm run build
 
-# Stage 2: Serve with a lightweight web server (nginx)
+# Stage 2: Nginx
 FROM nginx:alpine
 
-# Remove default nginx static files and replace with Vite build
 RUN rm -rf /usr/share/nginx/html/*
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy custom nginx config (optional)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
-
+COPY --from=builder /app/dist /usr/share/nginx/html  # Now matches build path
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]
