@@ -22,5 +22,8 @@ RUN mkdir -p /usr/share/nginx/html
 # Copy built frontend
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# Copy the custom nginx.conf to replace the default one
+COPY nginx.conf /etc/nginx/nginx.conf
+
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

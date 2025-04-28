@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+const backendUrl = process.env.BACKEND_URL;
+
 
 const MapperAlerts: React.FC = () => {
     const [usernameQuery, setUsernameQuery] = useState('');
@@ -11,7 +13,7 @@ const MapperAlerts: React.FC = () => {
     const handleUsernameSearch = async () => {
         try {
             const res = await axios.get(
-                `http://localhost:3000/api/v1/users/search?username=${usernameQuery}`
+                `${backendUrl}/api/v1/users/search?username=${usernameQuery}`
             );
             setMatchedUsers(res.data.map((u: { Name: string }) => u.Name));
         } catch (err) {
@@ -27,7 +29,7 @@ const MapperAlerts: React.FC = () => {
     const handleSubmit = async () => {
         if (!selectedUser || !email) return;
         try {
-            await axios.post('http://localhost:3000/api/v1/users/create_alert', {
+            await axios.post(`${backendUrl}/api/v1/users/create_alert`, {
                 username: selectedUser,
                 email,
             });
