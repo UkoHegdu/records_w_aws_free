@@ -1,6 +1,8 @@
 // File: /frontend/src/pages/Mapper news.tsx
 import React, { useState } from 'react';
 import axios from 'axios';
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
+
 
 const MapperNews: React.FC = () => {
     const [mapUid, setMapUid] = useState('wQZaLfhFFBMhAuO0FRdVVLMOzo4');
@@ -17,7 +19,7 @@ const MapperNews: React.FC = () => {
         e.preventDefault();
         try {
             const res = await axios.get(
-                `http://localhost:3000/api/v1/records/latest?mapUid=${mapUid}&period=${timeRange}`
+                `http://${backendUrl}/api/v1/records/latest?mapUid=${mapUid}&period=${timeRange}`
             );
             setResult(res.data);
         } catch (err) {
@@ -29,7 +31,7 @@ const MapperNews: React.FC = () => {
         try {
             // Mocked call to get matching usernames
             const res = await axios.get(
-                `http://localhost:3000/api/v1/users/search?username=${usernameQuery}`
+                `http://${backendUrl}/api/v1/users/search?username=${usernameQuery}`
             );
             setMatchedUsers(res.data.map((u: { Name: string }) => u.Name));
         } catch (err) {
@@ -42,7 +44,7 @@ const MapperNews: React.FC = () => {
         setLoading(true); // ⏳ show spinner
         try {
             const res = await axios.get(
-                `http://localhost:3000/api/v1/users/maps?username=${username}`
+                `http://${backendUrl}/api/v1/users/maps?username=${username}`
             );
             setMapsAndLeaderboards(res.data);
         } catch (err) {
