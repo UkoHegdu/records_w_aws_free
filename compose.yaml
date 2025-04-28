@@ -41,7 +41,7 @@ services:
   frontend:
     build: ./frontend
     environment:
-      BACKEND_URL: /
+      VITE_BACKEND_URL: /
     ports:
       - "80:80"
 
