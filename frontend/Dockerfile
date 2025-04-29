@@ -26,9 +26,12 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf /etc/nginx/conf.d/default.conf
 
+# Runtime configuration
 ARG VITE_BACKEND_URL=/
 ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 
-
 EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD curl -f http://localhost/health || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]
