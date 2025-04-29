@@ -18,8 +18,9 @@ const MapperNews: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            console.log('backendUrla čeks =', backendUrl);
             const res = await axios.get(
-                `http://${backendUrl}/api/v1/records/latest?mapUid=${mapUid}&period=${timeRange}`
+                `${backendUrl}/api/v1/records/latest?mapUid=${mapUid}&period=${timeRange}`
             );
             setResult(res.data);
         } catch (err) {
@@ -30,8 +31,9 @@ const MapperNews: React.FC = () => {
     const handleUsernameSearch = async () => {
         try {
             // Mocked call to get matching usernames
+            console.log('backendUrla čeks =', backendUrl);
             const res = await axios.get(
-                `http://${backendUrl}/api/v1/users/search?username=${usernameQuery}`
+                `${backendUrl}/api/v1/users/search?username=${usernameQuery}`
             );
             setMatchedUsers(res.data.map((u: { Name: string }) => u.Name));
         } catch (err) {
@@ -44,7 +46,7 @@ const MapperNews: React.FC = () => {
         setLoading(true); // ⏳ show spinner
         try {
             const res = await axios.get(
-                `http://${backendUrl}/api/v1/users/maps?username=${username}`
+                `${backendUrl}/api/v1/users/maps?username=${username}`
             );
             setMapsAndLeaderboards(res.data);
         } catch (err) {

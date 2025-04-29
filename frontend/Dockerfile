@@ -9,7 +9,7 @@ RUN npm install
 COPY . .
 
 # Runtime configuration
-ARG VITE_BACKEND_URL=/
+ARG VITE_BACKEND_URL=http://backend:3000
 ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 
 # 👇 Pass the ARG to the build process for Vite
