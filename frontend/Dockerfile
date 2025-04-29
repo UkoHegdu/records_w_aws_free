@@ -8,7 +8,12 @@ RUN npm install
 
 COPY . .
 
-RUN npm run build
+# Runtime configuration
+ARG VITE_BACKEND_URL=/
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
+
+# 👇 Pass the ARG to the build process for Vite
+RUN echo "VITE_BACKEND_URL=$VITE_BACKEND_URL" > .env && npm run build
 
 # Stage 2: Nginx
 FROM nginx:alpine
@@ -26,9 +31,6 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY default.conf /etc/nginx/conf.d/default.conf
 
-# Runtime configuration
-ARG VITE_BACKEND_URL=/
-ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s \
