@@ -39,9 +39,10 @@ services:
       - "3000:3000"
 
   frontend:
-    build: ./frontend
-    environment:
-      VITE_BACKEND_URL: /
+    build:
+      context: ./frontend
+      args:
+        VITE_BACKEND_URL: /
     ports:
       - "80:80"
 
