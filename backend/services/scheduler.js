@@ -82,8 +82,13 @@ const checkNewRecordsAndSendAlerts = async () => {
                     text: `New times have been driven on your map(s):\n\n${formattedRecords}`
                 };
 
-                await transporter.sendMail(message);
-                console.log(`✅ Email sent to ${email}`);
+                try {
+                    await transporter.sendMail(message);
+                    console.log(`✅ Email sent to ${email}`);
+                } catch (error) {
+                    console.error(`❌ Failed to send email to ${email}:`, error.message);
+                    console.error(error.stack);
+                }
             } else {
                 console.log(`ℹ️ No new records for ${username}`);
             }
@@ -101,9 +106,9 @@ cron.schedule('0 4 * * *', checkNewRecordsAndSendAlerts, {
 });
 
 // Manually trigger after short delay for testing
-//setTimeout(() => {
-//    checkNewRecordsAndSendAlerts();
-//}, 3000);
+setTimeout(() => {
+    checkNewRecordsAndSendAlerts();
+}, 3000);
 
 /*
 setTimeout(() => {

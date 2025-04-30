@@ -44,6 +44,7 @@ const MapperNews: React.FC = () => {
     const handleUserSelect = async (username: string) => {
         setSelectedUser(username);
         setLoading(true); // ⏳ show spinner
+
         try {
             const res = await axios.get(
                 `${backendUrl}/api/v1/users/maps?username=${username}`

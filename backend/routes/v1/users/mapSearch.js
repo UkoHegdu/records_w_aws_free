@@ -59,4 +59,3 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
 };
 
 module.exports = { fetchMapsAndLeaderboards };
-
