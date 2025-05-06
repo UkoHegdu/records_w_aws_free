@@ -1,6 +1,8 @@
 // httpClient.js
 const axios = require('axios');
 const tokenStore = require('./authTokenStore');
+const { login } = require('./login'); // import the login function
+
 
 let lastRefreshTimestamp = 0; // Variable to track the last refresh timestamp
 
@@ -61,8 +63,16 @@ function httpClient(baseURL) {
                     error.config.headers.Authorization = `nadeo_v1 ${newAccessToken}`;
                     return instance(error.config); // Retry
                 } catch (refreshError) {
-                    console.error('Refresh token failed');
-                    throw refreshError;
+                    console.error('Refresh token failed, mēģinam pilno loginu');
+                    try {
+                        await login(); // Re-authenticate
+                        const newAccessToken = tokenStore.getAccessToken();
+                        error.config.headers.Authorization = `nadeo_v1 t=${newAccessToken}`;
+                        return instance(error.config); // Retry request
+                    } catch (loginError) {
+                        console.error('❌ Login also failed after refresh attempt.');
+                        return Promise.reject(loginError);
+                    }
                 }
             }
             throw error;
