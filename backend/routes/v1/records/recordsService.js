@@ -11,7 +11,7 @@ const getRecordsFromApi = async (mapUid) => {
     console.log('getrecordsfrom api called');
     try {
 
-        const response = await client.get(url);   //handle-o autorizāciju (yes) un refrešus (NOT)
+        const response = await client.get(url);
         return response.data;  // Return the API response data
 
     } catch (err) {

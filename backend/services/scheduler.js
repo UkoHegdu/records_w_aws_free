@@ -106,9 +106,9 @@ cron.schedule('0 4 * * *', checkNewRecordsAndSendAlerts, {
 });
 
 // Manually trigger after short delay for testing
-setTimeout(() => {
-    checkNewRecordsAndSendAlerts();
-}, 10000);
+//setTimeout(() => {
+//    checkNewRecordsAndSendAlerts();
+//}, 10000);
 
 /*
 setTimeout(() => {

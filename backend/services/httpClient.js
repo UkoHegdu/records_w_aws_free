@@ -1,10 +1,12 @@
 // httpClient.js
 const axios = require('axios');
 const tokenStore = require('./authTokenStore');
-const { login } = require('./login'); // import the login function
+const { login } = require('./authService');
 
 
 let lastRefreshTimestamp = 0; // Variable to track the last refresh timestamp
+let simulateFirst401 = true; // Force first response to be 401 for testing
+
 
 function httpClient(baseURL) {
     const instance = axios.create({
@@ -24,12 +26,18 @@ function httpClient(baseURL) {
         return config;
     });
 
+
+
+
+
+
     // Response interceptor: refresh token on 401
     instance.interceptors.response.use(
         response => response,
         async error => {
             if (error.response?.status === 401) {
-                const refreshToken = tokenStore.getRefreshToken();
+                const refreshToken = 'test_token_pls_ignore'; // <- Fake token for testing, remove this, and uncomment the line below
+                //                const refreshToken = tokenStore.getRefreshToken();
                 console.log('📥 SANJEMTS 401, jāizmanto refresh tokens');
                 //  if (!refreshToken) {
                 //     console.log('refreshtokena nav (nav reāli)');
