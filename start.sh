@@ -46,7 +46,7 @@ done
 
 # Verify required variables are set
 REQUIRED_VARS=("PGUSER" "PGPASSWORD" "PGDATABASE" "EMAIL_USER" "EMAIL_PASS" 
-               "AUTH_API_URL" "LEAD_API" "ACCOUNT_API" "AUTHORIZATION" "USER_AGENT")
+               "AUTH_API_URL" "LEAD_API" "ACCOUNT_API" "AUTHORIZATION" "USER_AGENT" "JWT_SECRET")
 
 echo "🔍 Verifying required variables..."
 for var in "${REQUIRED_VARS[@]}"; do
@@ -60,12 +60,7 @@ echo "✅ All parameters loaded successfully"
 echo "🟢 You can now run your docker-compose commands manually"
 
 # Display next steps
-echo ""
-echo "Next steps:"
-echo "1. Run your Docker commands:"
-echo "   docker-compose up -d"
-echo "2. Or start your application directly:"
-echo "   node index.js"
+echo "done, running docker-compose up -d"
 
 # Start containers without BuildKit enabled
 docker-compose up -d

@@ -16,7 +16,7 @@ const Landing: React.FC = () => {
                 <li>See, set and manage driver notifications, so you know when someone snatches your WR.</li>
             </ul>
             <p>
-                The app is still in early development, so expect improvements and new features over time!
+                The functionality becomes available once you log in.
             </p>
         </div>
     );
