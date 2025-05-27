@@ -3,7 +3,7 @@ let refreshToken = null;
 
 module.exports = {
     getAccessToken: () => {
-        console.log('📥 Fetching access token:'); // Log when access token is fetched
+        //console.log('📥 Fetching access token:'); // Log when access token is fetched
         return accessToken;
     },
     getRefreshToken: () => {

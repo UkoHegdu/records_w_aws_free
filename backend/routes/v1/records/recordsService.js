@@ -8,7 +8,7 @@ const client = httpClient(process.env.LEAD_API);
 // Fetch records from the external Trackmania API
 const getRecordsFromApi = async (mapUid) => {
     const url = `/api/token/leaderboard/group/Personal_Best/map/${mapUid}/top?onlyWorld=true&length=100`;
-    console.log('getrecordsfrom api called');
+    //console.log('getrecordsfrom api called');
     try {
 
         const response = await client.get(url);

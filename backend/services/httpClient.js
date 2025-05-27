@@ -21,7 +21,7 @@ function httpClient(baseURL) {
         if (token) {
             config.headers.Authorization = `nadeo_v1 t=${token}`;
         }
-        console.log('📤 rekvests aiziet <3');
+        //console.log('📤 rekvests aiziet <3');
         //console.log('📤 Sending request with headers:', config.headers);
         return config;
     });

@@ -1,7 +1,7 @@
 const filterRecordsByPeriod = (data, period = '1d') => {
     const now = Date.now();
     let timeThreshold;
-    console.log(`defaultais filtrs applied: ${period}`);
+    //console.log(`defaultais filtrs applied: ${period}`);
     switch (period) {
         case '1d':
             timeThreshold = 24 * 60 * 60 * 1000;
