@@ -3,6 +3,21 @@ const { getRecordsFromApi } = require('../records/recordsService');
 const axios = require('axios');
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+const RETRY_LIMIT = 5;
+const RETRY_DELAY_MS = 15 * 60 * 1000; // 15 minutes
+
+const fetchWithRetry = async (fn, retries = RETRY_LIMIT) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            console.error(`Attempt ${attempt} failed:`, error?.response?.data || error.message);
+            if (attempt === retries) throw error;
+            console.log(`Waiting ${RETRY_DELAY_MS / 60000} minutes before retrying...`);
+            await sleep(RETRY_DELAY_MS);
+        }
+    }
+};
 
 const fetchMapsAndLeaderboards = async (username, period = null) => {
     console.log('fetching maps and leaderboards');
@@ -14,11 +29,11 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
 
     const allResults = [];
 
-    try {
+    await fetchWithRetry(async () => {
         let hasMore = true;
         let lastMapId = null;
 
-        while (hasMore) {                 // fetch all the maps that are in multiple pages. If just one page, the loop executes once
+        while (hasMore) {  // fetch all the maps that are in multiple pages. If just one page, the loop executes once
             const queryParams = new URLSearchParams(params);
             if (lastMapId) queryParams.append('after', lastMapId);
 
@@ -34,28 +49,25 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
             hasMore = data.More;
             console.log('viena lapa pabeigta ayoo');
         }
+    });
 
-        const mapsAndLeaderboards = [];
+    const mapsAndLeaderboards = [];
 
-        for (const map of allResults) {     // max 2 requests per second, hence the sleep 500 in the end. Getting all the leaderboards for each map. 2 maps per second
-            const leaderboard = await getRecordsFromApi(map.MapUid);
-            const filtered = period ? filterRecordsByPeriod(leaderboard, period) : leaderboard;
+    for (const map of allResults) {   // max 2 requests per second, hence the sleep 500 in the end. Getting all the leaderboards for each map. 2 maps per second
+        const leaderboard = await fetchWithRetry(() => getRecordsFromApi(map.MapUid));
+        const filtered = period ? filterRecordsByPeriod(leaderboard, period) : leaderboard;
 
-            if (filtered.length > 0) {
-                mapsAndLeaderboards.push({
-                    mapName: map.Name,
-                    leaderboard: filtered
-                });
-            }
-
-            await sleep(500); //TM DOC specified, do not change
+        if (filtered.length > 0) {
+            mapsAndLeaderboards.push({
+                mapName: map.Name,
+                leaderboard: filtered
+            });
         }
 
-        return mapsAndLeaderboards;
-    } catch (error) {
-        console.error('❌ Error fetching maps or leaderboards:', error);
-        throw error;
+        await sleep(500); // TM DOC specified, do not change
     }
+
+    return mapsAndLeaderboards;
 };
 
 module.exports = { fetchMapsAndLeaderboards };
