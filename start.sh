@@ -46,7 +46,7 @@ done
 
 # Verify required variables are set
 REQUIRED_VARS=("PGUSER" "PGPASSWORD" "PGDATABASE" "EMAIL_USER" "EMAIL_PASS" 
-               "AUTH_API_URL" "LEAD_API" "ACCOUNT_API" "AUTHORIZATION" "USER_AGENT" "JWT_SECRET")
+               "AUTH_API_URL" "LEAD_API" "ACCOUNT_API" "AUTHORIZATION" "USER_AGENT" "JWT_SECRET" "OCLIENT_ID" "OCLIENT_SECRET")
 
 echo "🔍 Verifying required variables..."
 for var in "${REQUIRED_VARS[@]}"; do

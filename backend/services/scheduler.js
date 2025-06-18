@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const pool = require('./db');
 const { fetchMapsAndLeaderboards } = require('../routes/v1/users/mapSearch'); // contains fetchmapsandleaderboards function
+const { translateAccountNames } = require('../routes/v1/users/accountNames'); // contains translateaccountNames function
 const nodemailer = require('nodemailer');
 const httpClient = require('./httpClient'); // if not imported yet
 const client = httpClient(process.env.ACCOUNT_API);
@@ -17,31 +18,13 @@ const transporter = nodemailer.createTransport({
 
 //formatēšanas funkcija
 async function formatNewRecords(records) {
-    // Step 1: Collect all accountIds
-    const accountIds = [];
-    for (const record of records) {
-        for (const entry of record.leaderboard) {
-            accountIds.push(entry.accountId);
-        }
-    }
+    // Step 1: Collect unique accountIds
+    const accountIds = Array.from(new Set(
+        records.flatMap(record => record.leaderboard.map(entry => entry.accountId))
+    ));
 
-    // Step 2: Batch fetch display names
-    const accountIdToName = {};
-
-    /*  const BATCH_SIZE = 50; //tm doc specified
-      for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {   //ejam cauri katram ierakstam (maps)
-          const batch = accountIds.slice(i, i + BATCH_SIZE);      //ejam cauri katram kartes ieraksta leaderboarda ierakstam (players)
-  
-          try {
-              const params = batch.map(id => `accountId[]=${id}`).join('&');
-              console.log('fečojam name resolveri ar', params);
-              const response = await client.get(`/api/display-names?${params}`);
-              Object.assign(accountIdToName, response.data);
-          } catch (error) {
-              console.error('⚠️ Error fečing account names:', error.message);
-              // If a batch fails, still continue formatting
-          }
-      }*/
+    // Step 2: Use accountNames helper
+    const accountIdToName = await translateAccountNames(accountIds);
 
     // Step 3: Format the records nicely
     let formatted = '';
@@ -106,12 +89,12 @@ cron.schedule('0 4 * * *', checkNewRecordsAndSendAlerts, {
 });
 
 // Manually trigger after short delay for testing
-//setTimeout(() => {
-//    checkNewRecordsAndSendAlerts();
-//}, 10000);
+setTimeout(() => {
+    checkNewRecordsAndSendAlerts();
+}, 3000);
 
 /*
 setTimeout(() => {
     checkNewRecordsAndSendAlerts();
 }, 3000);
-const response = await client.get('/api/display-names?accountId[]=c2ec36f4-c066-4008-ae1e-a5f7d80e7f34');*/
+*/

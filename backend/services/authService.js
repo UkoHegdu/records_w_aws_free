@@ -34,7 +34,7 @@ async function login() {
             return;
         }
 
-        tokenStore.setTokens(accessToken, refreshToken);
+        tokenStore.setTokens('auth', accessToken, refreshToken);
         console.log('✅ Logged in successfully. Tokens set.');
     } catch (error) {
         if (error.response) {
