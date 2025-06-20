@@ -93,8 +93,5 @@ setTimeout(() => {
     checkNewRecordsAndSendAlerts();
 }, 3000);
 
-/*
-setTimeout(() => {
-    checkNewRecordsAndSendAlerts();
-}, 3000);
-*/
+
+

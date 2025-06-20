@@ -1,3 +1,4 @@
+// httpClient.js
 const axios = require('axios');
 const tokenStore = require('./authTokenStore');
 const { login } = require('./authService');
@@ -5,23 +6,6 @@ const { login } = require('./authService');
 let lastRefreshTimestamp = 0;
 let lastLoginTimestamp = 0;
 let isRefreshing = false;
-let pendingRequests = [];
-
-function waitForTokenRefresh() {
-    return new Promise((resolve, reject) => {
-        pendingRequests.push({ resolve, reject });
-    });
-}
-
-function resolvePendingRequests(token) {
-    pendingRequests.forEach(p => p.resolve(token));
-    pendingRequests = [];
-}
-
-function rejectPendingRequests(err) {
-    pendingRequests.forEach(p => p.reject(err));
-    pendingRequests = [];
-}
 
 function httpClient(baseURL) {
     const instance = axios.create({
@@ -48,6 +32,14 @@ function httpClient(baseURL) {
                 const refreshToken = tokenStore.getRefreshToken('auth');
 
                 console.log('📥 Received 401, attempting token refresh...');
+                console.error(`🕒 [${new Date().toISOString()}] ❌ Received 401 error. Original request failed with:`, {
+                    url: error.config?.url,
+                    method: error.config?.method,
+                    headers: error.config?.headers,
+                    data: error.config?.data,
+                    response: error.response?.data
+                });
+
 
                 // Prevent infinite retry loops
                 if (!originalRequest._retry) {
@@ -59,19 +51,8 @@ function httpClient(baseURL) {
                     originalRequest._retry++;
                 }
 
-                // Handle concurrent refresh attempts
-                if (isRefreshing) {
-                    try {
-                        const newToken = await waitForTokenRefresh();
-                        originalRequest.headers.Authorization = `nadeo_v1 t=${newToken}`;
-                        return instance(originalRequest);
-                    } catch (e) {
-                        return Promise.reject(e);
-                    }
-                }
-
                 const now = Date.now();
-                if (now - lastRefreshTimestamp < 10000) {
+                if (now - lastRefreshTimestamp < 1000) {
                     console.log('⏱ Refresh requested too recently. Aborting...');
                     return Promise.reject(new Error('Refresh cooldown active.'));
                 }
@@ -92,20 +73,26 @@ function httpClient(baseURL) {
                     );
 
                     const newAccessToken = res.data.accessToken;
+                    const newRefreshToken = res.data.refreshToken || refreshToken; // fallback if refreshToken is not returned
+
+                    // ✅ Save both access and refresh tokens
+                    tokenStore.setTokens('auth', newAccessToken, newRefreshToken);
+                    console.log(`🔑 New access token: ${newAccessToken}`);
+                    console.log(`🔄 New refresh token: ${newRefreshToken}`);
+
                     lastRefreshTimestamp = now;
                     isRefreshing = false;
-                    resolvePendingRequests(newAccessToken);
 
-                    console.log('🔁 Retrying request with refreshed token');
+                    console.log(`🔁 Retrying original request to ${originalRequest.url} with refreshed token at ${new Date().toISOString()}`);
                     originalRequest.headers.Authorization = `nadeo_v1 t=${newAccessToken}`;
+
                     return instance(originalRequest);
 
                 } catch (refreshError) {
                     console.error('⚠️ Refresh failed. Attempting full login...');
-                    rejectPendingRequests(refreshError);
                     isRefreshing = false;
 
-                    if (Date.now() - lastLoginTimestamp < 10000) {
+                    if (Date.now() - lastLoginTimestamp < 1000) {
                         console.error('⏱ Login attempted too soon. Aborting...');
                         return Promise.reject(new Error('Login cooldown active.'));
                     }

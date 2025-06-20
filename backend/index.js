@@ -31,13 +31,13 @@ pool.connect()
         console.log('✅ Connected to PostgreSQL');
         // Start the server *only if DB connects*
         // Call login() once at startup to get initial tokens
-        //login().then(() => {
-        app.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
+        login().then(() => {
+            app.listen(PORT, () => {
+                console.log(`Server running on port ${PORT}`);
+            });
+        }).catch((err) => {
+            console.error('Initial login failed:', err.message);
         });
-        //    }).catch((err) => {
-        //       console.error('Initial login failed:', err.message);
-        //  });
     })
     .catch((err) => {
         console.error('❌ Failed to connect to PostgreSQL', err);

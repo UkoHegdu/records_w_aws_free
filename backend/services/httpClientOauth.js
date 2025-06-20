@@ -38,7 +38,7 @@ function httpClientOauth(baseURL) {
                 }
 
                 try {
-                    await refreshOauth();
+                    await refreshOauth(); //lielisks kods - NEKAS šeit netiek darīts
                     lastRefreshTimestamp = currentTimestamp;
 
                     const newAccessToken = tokenStore.getAccessToken(TOKEN_PROVIDER);
