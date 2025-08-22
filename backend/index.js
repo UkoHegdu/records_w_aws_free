@@ -5,8 +5,8 @@ const { login } = require('./services/authService');
 const healthRoute = require('./routes/health');
 const recordsRoutes = require('./routes/v1/records/recordsRoutes')
 const userRoutes = require('./routes/v1/users/user_routes')
-const pool = require('./services/db'); // your PostgreSQL pool
-require('./services/scheduler'); // Start the cron job
+//const pool = require('./services/db'); // your PostgreSQL pool
+//require('./services/scheduler'); // Start the cron job
 
 
 
@@ -26,7 +26,7 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Route not found, VAS?', path: req.originalUrl }); // trablšūt
 });
 
-pool.connect()
+/* pool.connect()
     .then(() => {
         console.log('✅ Connected to PostgreSQL');
         // Start the server *only if DB connects*
@@ -42,7 +42,12 @@ pool.connect()
     .catch((err) => {
         console.error('❌ Failed to connect to PostgreSQL', err);
         process.exit(1); // exit if DB is not reachable
-    });
+    });*/
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+
 
 process.on('unhandledRejection', (err) => {
     console.error('Unhandled redzhekšon:', err);
