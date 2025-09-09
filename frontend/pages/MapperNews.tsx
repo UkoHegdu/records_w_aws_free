@@ -17,7 +17,7 @@ const MapperNews: React.FC = () => {
     const [loading, setLoading] = useState(false); //spinnneris
     const [jobId, setJobId] = useState<string | null>(null);
     const [jobStatus, setJobStatus] = useState<string>('');
-    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const [error, setError] = useState<string | null>(null);
     const pollingAttemptsRef = useRef<number>(0);
     const [mapSearchPeriod, setMapSearchPeriod] = useState('1d');
@@ -57,12 +57,6 @@ const MapperNews: React.FC = () => {
         }
     };
 
-
-    // Function to format timestamp
-    const formatTimestamp = (timestamp: number) => {
-        const date = new Date(timestamp * 1000);
-        return date.toLocaleString();
-    };
 
     // Function to format date as YYYY.MM.DD
     const formatDate = (timestamp: number) => {

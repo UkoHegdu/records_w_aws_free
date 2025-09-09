@@ -66,3 +66,9 @@ temp/
 
 # Production notes (contains sensitive deployment info)
 notes-for-production.txt
+
+# Sensitive configuration files
+parameters.json
+response.json
+response2.json
+*.json.bak
