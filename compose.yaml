@@ -1,34 +1,16 @@
 version: '3.8'
 
 services:
-   backend:
-    build: ./backend
-    environment:
-      PORT: 3000
-      PGUSER: ${PGUSER}
-      PGPASSWORD: ${PGPASSWORD}
-      PGDATABASE: ${PGDATABASE}
-      PGHOST: postgres
-      PGPORT: 5432
-      EMAIL_USER: ${EMAIL_USER}
-      EMAIL_PASS: ${EMAIL_PASS}
-      AUTH_API_URL: ${AUTH_API_URL}
-      LEAD_API: ${LEAD_API}
-      ACCOUNT_API: ${ACCOUNT_API}
-      AUTHORIZATION: ${AUTHORIZATION}
-      USER_AGENT: ${USER_AGENT}
-      JWT_SECRET: ${JWT_SECRET}
-      OCLIENT_ID: ${OCLIENT_ID}
-      OCLIENT_SECRET: ${OCLIENT_SECRET}
-    ports:
-      - "3000:3000"
+   # Backend service removed - migrated to AWS Lambda functions
+   # All backend functionality now runs as serverless Lambda functions
+   
    frontend:
     build:
       context: ./frontend
       args:
-        VITE_BACKEND_URL: http://13.53.122.130:3000
+        VITE_BACKEND_URL: https://your-api-gateway-url.execute-api.eu-north-1.amazonaws.com/prod
     ports:
       - "80:80"
 
-volumes:
-  pg_data:
+# PostgreSQL volume removed - migrated to Neon database
+# All database operations now handled by Neon PostgreSQL

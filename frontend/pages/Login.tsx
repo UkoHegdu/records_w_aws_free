@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
+
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -10,7 +12,7 @@ const Login: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const response = await axios.post('/api/v1/users/login', { email, password });
+            const response = await axios.post(`${backendUrl}/api/v1/users/login`, { email, password });
             localStorage.setItem('token', response.data.token);
             navigate('/');
             window.location.reload(); // Refresh to update UI

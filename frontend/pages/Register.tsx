@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
-const backendUrl = import.meta.env.VITE_API_URL || ''; // adjust if needed
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
 
 const Register: React.FC = () => {
     const [email, setEmail] = useState('');

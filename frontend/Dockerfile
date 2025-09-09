@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM node:22.15.0-alpine AS builder
+FROM node:22.18.0-alpine AS builder
 
 WORKDIR /app
 
@@ -9,8 +9,8 @@ RUN npm install
 COPY . .
 
 # Runtime configuration
-ARG VITE_BACKEND_URL=http://13.53.122.130:3000
-ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
+#ARG VITE_BACKEND_URL=http://13.53.122.130:3000
+#ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 
 # 👇 Pass the ARG to the build process for Vite
 RUN echo "VITE_BACKEND_URL=$VITE_BACKEND_URL" > .env && npm run build
