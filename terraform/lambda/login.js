@@ -2,6 +2,11 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Client } = require('pg');
+const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
+const { marshall } = require('@aws-sdk/util-dynamodb');
+const { v4: uuidv4 } = require('uuid');
+
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 
 // Database connection using Neon
 const getDbConnection = () => {
@@ -93,12 +98,52 @@ exports.handler = async (event, context) => {
             };
         }
 
-        // Generate JWT token
-        const token = jwt.sign(
-            { id: user.rows[0].id },
+        // Generate session ID
+        const sessionId = uuidv4();
+        const userId = user.rows[0].id.toString();
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+        // Generate access token (15 minutes)
+        const accessToken = jwt.sign(
+            {
+                user_id: userId,
+                session_id: sessionId
+            },
             process.env.JWT_SECRET,
-            { expiresIn: '1h' }
+            { expiresIn: '15m' }
         );
+
+        // Generate refresh token (7 days)
+        const refreshToken = jwt.sign(
+            {
+                user_id: userId,
+                session_id: sessionId
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        // Store session in DynamoDB
+        const sessionData = {
+            session_id: sessionId,
+            user_id: userId,
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            created_at: now.toISOString(),
+            expires_at: Math.floor(expiresAt.getTime() / 1000), // Unix timestamp for TTL
+            last_accessed: now.toISOString(),
+            user_agent: event.headers['User-Agent'] || 'Unknown',
+            ip_address: event.requestContext?.identity?.sourceIp || 'Unknown'
+        };
+
+        const putSessionParams = {
+            TableName: process.env.USER_SESSIONS_TABLE_NAME,
+            Item: marshall(sessionData)
+        };
+
+        await dynamoClient.send(new PutItemCommand(putSessionParams));
+        console.log('✅ Session created in DynamoDB:', sessionId);
 
         return {
             statusCode: 200,
@@ -108,7 +153,17 @@ exports.handler = async (event, context) => {
                 'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
                 'Access-Control-Allow-Methods': 'POST,OPTIONS'
             },
-            body: JSON.stringify({ token })
+            body: JSON.stringify({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+                expires_in: 900, // 15 minutes
+                token_type: 'Bearer',
+                user: {
+                    id: userId,
+                    username: user.rows[0].username,
+                    email: user.rows[0].email
+                }
+            })
         };
 
     } catch (err) {

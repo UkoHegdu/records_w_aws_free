@@ -1,4 +1,5 @@
 // lambda/shared/apiClient.js
+//authentication needed for fetching leaderboards from trackmania api
 const axios = require('axios');
 const { DynamoDBClient, GetItemCommand, PutItemCommand } = require('@aws-sdk/client-dynamodb');
 const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');

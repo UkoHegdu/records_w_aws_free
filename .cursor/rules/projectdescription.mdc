@@ -1,0 +1,5 @@
+---
+description: terraform file edits
+alwaysApply: false
+---
+Relevant terraform files are main.tf, outputs.tf, api-gateway.tf, variables.tf and terraform.tfvars

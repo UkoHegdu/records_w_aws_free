@@ -295,6 +295,48 @@ resource "aws_api_gateway_integration" "create_alert_integration" {
   uri                    = aws_lambda_function.create_alert.invoke_arn
 }
 
+# GET method for fetching alerts - /users/create_alert
+resource "aws_api_gateway_method" "create_alert_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.create_alert.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "create_alert_get_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.create_alert.id
+  http_method = aws_api_gateway_method.create_alert_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.create_alert.invoke_arn
+}
+
+# DELETE method for removing alerts - /users/create_alert/{id}
+resource "aws_api_gateway_resource" "create_alert_id" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.create_alert.id
+  path_part   = "{id}"
+}
+
+resource "aws_api_gateway_method" "create_alert_delete" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.create_alert_id.id
+  http_method   = "DELETE"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "create_alert_delete_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.create_alert_id.id
+  http_method = aws_api_gateway_method.create_alert_delete.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.create_alert.invoke_arn
+}
+
 # OPTIONS method for CORS - /users/create_alert
 resource "aws_api_gateway_method" "create_alert_options" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
@@ -635,13 +677,31 @@ resource "aws_lambda_permission" "api_gw_lambda_maps" {
   source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }
 
-# Permission for mapSearch to invoke background processing
-resource "aws_lambda_permission" "mapSearch_invoke_background" {
-  statement_id  = "AllowMapSearchToInvokeBackground"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.mapSearchBackground.function_name
-  principal     = "lambda.amazonaws.com"
-  source_arn    = aws_lambda_function.mapSearch.arn
+# SQS Queue Policy for Lambda access
+resource "aws_sqs_queue_policy" "map_search_queue_policy" {
+  queue_url = aws_sqs_queue.map_search_queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = [
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = [
+          aws_sqs_queue.map_search_queue.arn,
+          aws_sqs_queue.map_search_dlq.arn
+        ]
+      }
+    ]
+  })
 }
 
 resource "aws_lambda_permission" "api_gw_lambda_job_status" {
@@ -696,6 +756,163 @@ resource "aws_lambda_permission" "api_gw_lambda_register" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.register.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+#/users/refresh POST
+resource "aws_api_gateway_resource" "refresh" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.users.id
+  path_part   = "refresh"
+}
+
+resource "aws_api_gateway_method" "refresh_post" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.refresh.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "refresh_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.refresh.id
+  http_method = aws_api_gateway_method.refresh_post.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.refresh_token.invoke_arn
+}
+
+# OPTIONS method for CORS - /users/refresh
+resource "aws_api_gateway_method" "refresh_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.refresh.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "refresh_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.refresh.id
+  http_method = aws_api_gateway_method.refresh_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "refresh_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.refresh.id
+  http_method = aws_api_gateway_method.refresh_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "refresh_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.refresh.id
+  http_method = aws_api_gateway_method.refresh_options.http_method
+  status_code = aws_api_gateway_method_response.refresh_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+#/users/logout POST
+resource "aws_api_gateway_resource" "logout" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.users.id
+  path_part   = "logout"
+}
+
+resource "aws_api_gateway_method" "logout_post" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.logout.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "logout_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.logout.id
+  http_method = aws_api_gateway_method.logout_post.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.logout.invoke_arn
+}
+
+# OPTIONS method for CORS - /users/logout
+resource "aws_api_gateway_method" "logout_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.logout.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "logout_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.logout.id
+  http_method = aws_api_gateway_method.logout_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "logout_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.logout.id
+  http_method = aws_api_gateway_method.logout_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "logout_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.logout.id
+  http_method = aws_api_gateway_method.logout_options.http_method
+  status_code = aws_api_gateway_method_response.logout_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+# Lambda permissions for new endpoints
+resource "aws_lambda_permission" "api_gw_lambda_refresh" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.refresh_token.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gw_lambda_logout" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.logout.function_name
   principal     = "apigateway.amazonaws.com"
 
   source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"

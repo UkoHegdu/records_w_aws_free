@@ -59,6 +59,16 @@ output "parameter_store_parameters" {
   description = "Parameter Store parameter names being used by Lambda functions"
 }
 
+output "ses_configuration" {
+  value = {
+    from_email = aws_ses_email_identity.from_email.email
+    configuration_set_name = aws_ses_configuration_set.main.name
+    verified_email = aws_ses_email_identity.from_email.email
+  }
+  description = "SES configuration details"
+  sensitive = true
+}
+
 output "eventbridge_rule_name" {
   value = aws_cloudwatch_event_rule.scheduler_rule.name
   description = "EventBridge rule name for scheduler"

@@ -119,12 +119,41 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
 exports.fetchMapsAndLeaderboards = fetchMapsAndLeaderboards;
 
 const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
-const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
+const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
 const { marshall } = require('@aws-sdk/util-dynamodb');
 const { v4: uuidv4 } = require('uuid');
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-const lambdaClient = new LambdaClient({ region: process.env.AWS_REGION });
+const sqsClient = new SQSClient({ region: process.env.AWS_REGION });
+
+// Rate limiting: Track user requests per minute
+const userRequestCounts = new Map();
+const RATE_LIMIT_PER_MINUTE = 2; // Allow 2 requests per minute per user
+
+const isRateLimited = (username) => {
+    const now = Date.now();
+    const userKey = username.toLowerCase();
+
+    if (!userRequestCounts.has(userKey)) {
+        userRequestCounts.set(userKey, []);
+    }
+
+    const requests = userRequestCounts.get(userKey);
+
+    // Remove requests older than 1 minute
+    const oneMinuteAgo = now - 60000;
+    const recentRequests = requests.filter(timestamp => timestamp > oneMinuteAgo);
+
+    if (recentRequests.length >= RATE_LIMIT_PER_MINUTE) {
+        return true;
+    }
+
+    // Add current request
+    recentRequests.push(now);
+    userRequestCounts.set(userKey, recentRequests);
+
+    return false;
+};
 
 exports.handler = async (event, context) => {
     console.log('🗺️ mapSearch Lambda triggered!', event);
@@ -143,6 +172,24 @@ exports.handler = async (event, context) => {
                 'Access-Control-Allow-Methods': 'GET,OPTIONS'
             },
             body: JSON.stringify({ error: 'Username parameter required' })
+        };
+    }
+
+    // Check rate limiting
+    if (isRateLimited(username)) {
+        console.log(`🚫 Rate limit exceeded for user: ${username}`);
+        return {
+            statusCode: 429,
+            headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+                'Access-Control-Allow-Methods': 'GET,OPTIONS'
+            },
+            body: JSON.stringify({
+                error: 'Rate limit exceeded. Please wait before making another request.',
+                retryAfter: 60
+            })
         };
     }
 
@@ -171,18 +218,27 @@ exports.handler = async (event, context) => {
         }));
         console.log('✅ Job stored in DynamoDB successfully');
 
-        // Trigger background processing Lambda
-        console.log('🚀 Invoking background Lambda:', process.env.MAP_SEARCH_BACKGROUND_FUNCTION_NAME);
-        await lambdaClient.send(new InvokeCommand({
-            FunctionName: process.env.MAP_SEARCH_BACKGROUND_FUNCTION_NAME,
-            InvocationType: 'Event', // Async invocation
-            Payload: JSON.stringify({
+        // Send job to SQS queue
+        console.log('📤 Sending job to SQS queue:', process.env.MAP_SEARCH_QUEUE_URL);
+        await sqsClient.send(new SendMessageCommand({
+            QueueUrl: process.env.MAP_SEARCH_QUEUE_URL,
+            MessageBody: JSON.stringify({
                 jobId: jobId,
                 username: username,
-                period: period
-            })
+                period: period || '1d'
+            }),
+            MessageAttributes: {
+                jobId: {
+                    DataType: 'String',
+                    StringValue: jobId
+                },
+                username: {
+                    DataType: 'String',
+                    StringValue: username
+                }
+            }
         }));
-        console.log('✅ Background Lambda invoked successfully');
+        console.log('✅ Job sent to SQS queue successfully');
 
         // Return job ID immediately
         const response = {
@@ -196,7 +252,8 @@ exports.handler = async (event, context) => {
             body: JSON.stringify({
                 jobId: jobId,
                 status: 'pending',
-                message: 'Map search started. Use the job ID to check status.'
+                message: 'Map search queued. Use the job ID to check status.',
+                estimatedWaitTime: '2-5 minutes'
             })
         };
         console.log('📤 Returning response:', response);

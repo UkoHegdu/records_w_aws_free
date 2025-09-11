@@ -1,8 +1,7 @@
 // File: /frontend/src/pages/Mapper news.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
-
-const backendUrl = (import.meta as any).env.VITE_BACKEND_URL;
+import { Trophy, User, MapPin, RefreshCw, Search, AlertCircle } from 'lucide-react';
+import apiClient from '../auth';
 
 
 const MapperNews: React.FC = () => {
@@ -34,9 +33,9 @@ const MapperNews: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            console.log('backendUrla čeks =', backendUrl);
-            const res = await axios.get(
-                `${backendUrl}/api/v1/records/latest?mapUid=${mapUid}&period=${timeRange}`
+            console.log('Making API call to get latest records');
+            const res = await apiClient.get(
+                `/api/v1/records/latest?mapUid=${mapUid}&period=${timeRange}`
             );
             setResult(res.data);
         } catch (err) {
@@ -47,9 +46,9 @@ const MapperNews: React.FC = () => {
     const handleUsernameSearch = async () => {
         try {
             // Mocked call to get matching usernames
-            console.log('backendUrla čeks =', backendUrl);
-            const res = await axios.get(
-                `${backendUrl}/api/v1/users/search?username=${usernameQuery}`
+            console.log('Making API call to get latest records');
+            const res = await apiClient.get(
+                `/api/v1/users/search?username=${usernameQuery}`
             );
             setMatchedUsers(res.data.map((u: { Name: string }) => u.Name));
         } catch (err) {
@@ -99,8 +98,8 @@ const MapperNews: React.FC = () => {
                 return;
             }
 
-            const res = await axios.get(
-                `${backendUrl}/api/v1/users/maps/status/${jobId}`
+            const res = await apiClient.get(
+                `/api/v1/users/maps/status/${jobId}`
             );
 
             const { status, result, error } = res.data;
@@ -179,8 +178,8 @@ const MapperNews: React.FC = () => {
 
         try {
             // Start the map search job
-            const res = await axios.get(
-                `${backendUrl}/api/v1/users/maps?username=${username}&period=${mapSearchPeriod}`
+            const res = await apiClient.get(
+                `/api/v1/users/maps?username=${username}&period=${mapSearchPeriod}`
             );
 
             if (res.status === 202 && res.data.jobId) {
@@ -220,14 +219,27 @@ const MapperNews: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-8">🧪 Newest times from your maps</h1>
-                <div className="bg-white rounded-lg shadow p-6 mb-8">
+        <div className="min-h-screen p-6">
+            <div className="max-w-6xl mx-auto">
+                {/* Header */}
+                <div className="flex items-center gap-4 mb-8">
+                    <div className="p-3 bg-gradient-to-br from-secondary to-secondary-glow rounded-xl shadow-orange-glow">
+                        <Trophy className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-bold text-foreground">Newest Times</h1>
+                        <p className="text-muted-foreground">Latest records on your maps</p>
+                    </div>
+                </div>
+                <div className="racing-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                        <MapPin className="w-5 h-5" />
+                        Check Latest Records
+                    </h2>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Map UID:
                                 </label>
                                 <input
@@ -235,17 +247,17 @@ const MapperNews: React.FC = () => {
                                     value={mapUid}
                                     onChange={(e) => setMapUid(e.target.value)}
                                     required
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full px-3 py-2 rounded-xl bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-foreground mb-2">
                                     Time Range:
                                 </label>
                                 <select
                                     value={timeRange}
                                     onChange={(e) => setTimeRange(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full px-3 py-2 rounded-xl bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                                 >
                                     <option value="1d">1 Day</option>
                                     <option value="1w">1 Week</option>
@@ -255,8 +267,9 @@ const MapperNews: React.FC = () => {
                             <div className="flex items-end">
                                 <button
                                     type="submit"
-                                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="btn-racing w-full flex items-center justify-center gap-2"
                                 >
+                                    <RefreshCw size={20} />
                                     Check
                                 </button>
                             </div>
@@ -265,41 +278,53 @@ const MapperNews: React.FC = () => {
                 </div>
 
                 {result && (
-                    <div className="result-box">
+                    <div className="racing-card mb-8">
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <Trophy className="w-5 h-5" />
+                            Results
+                        </h3>
                         {result.error ? (
-                            <p className="error-text">{result.error}</p>
+                            <div className="p-4 bg-destructive/20 border border-destructive/30 rounded-xl text-destructive">
+                                <AlertCircle className="w-5 h-5 inline mr-2" />
+                                {result.error}
+                            </div>
                         ) : (
-                            <pre>{JSON.stringify(result, null, 2)}</pre>
+                            <pre className="bg-muted p-4 rounded-xl text-sm overflow-auto">{JSON.stringify(result, null, 2)}</pre>
                         )}
                     </div>
                 )}
 
-                <hr className="my-8 border-gray-300" />
-
-                <div className="bg-white rounded-lg shadow p-6 mb-8">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-6">🔍 Search by map author</h2>
+                <div className="racing-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+                        <Search className="w-5 h-5" />
+                        Search by map author
+                    </h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 Username:
                             </label>
-                            <input
-                                type="text"
-                                value={usernameQuery}
-                                onChange={(e) => setUsernameQuery(e.target.value)}
-                                disabled={loading}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                            />
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
+                                <input
+                                    type="text"
+                                    value={usernameQuery}
+                                    onChange={(e) => setUsernameQuery(e.target.value)}
+                                    disabled={loading}
+                                    placeholder="Enter TrackMania username"
+                                    className="w-full pl-12 pr-4 py-3 rounded-xl bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+                                />
+                            </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 Time Period for Map Search:
                             </label>
                             <select
                                 value={mapSearchPeriod}
                                 onChange={(e) => setMapSearchPeriod(e.target.value)}
                                 disabled={loading}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                                className="w-full px-3 py-3 rounded-xl bg-input border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
                             >
                                 <option value="1d">1 Day</option>
                                 <option value="1w">1 Week</option>
@@ -310,27 +335,40 @@ const MapperNews: React.FC = () => {
                             <button
                                 onClick={handleUsernameSearch}
                                 disabled={loading}
-                                className={`w-full px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${loading
-                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                                    : 'bg-green-600 text-white hover:bg-green-700'
+                                className={`w-full px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary flex items-center justify-center gap-2 ${loading
+                                    ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                                    : 'btn-racing-secondary'
                                     }`}
                             >
-                                {loading ? 'Searching...' : 'Search'}
+                                {loading ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Searching...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Search size={20} />
+                                        Search
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>
                 </div>
 
                 {matchedUsers.length > 0 && (
-                    <div className="bg-white rounded-lg shadow p-6 mb-8">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Please select a user:</h3>
+                    <div className="racing-card mb-8">
+                        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                            <User className="w-5 h-5" />
+                            Please select a user:
+                        </h3>
                         {loading && (
-                            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
+                            <div className="p-4 bg-primary/20 border border-primary/30 rounded-xl text-primary mb-4">
                                 <div className="flex items-center">
-                                    <span className="text-blue-500 mr-2">⏳</span>
+                                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-3" />
                                     <div>
                                         <strong>Search in Progress</strong>
-                                        <p className="mt-1">Please wait for the current search to complete before starting a new one.</p>
+                                        <p className="mt-1 text-sm">Please wait for the current search to complete before starting a new one.</p>
                                     </div>
                                 </div>
                             </div>
@@ -341,11 +379,12 @@ const MapperNews: React.FC = () => {
                                     key={user}
                                     onClick={() => !loading && handleUserSelect(user)}
                                     disabled={loading}
-                                    className={`px-4 py-2 rounded-md text-left transition-colors ${loading
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                                    className={`px-4 py-3 rounded-xl text-left transition-all duration-300 flex items-center gap-2 ${loading
+                                        ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                                        : 'bg-muted hover:bg-primary/10 text-foreground hover:border-primary/30 border border-border'
                                         }`}
                                 >
+                                    <User className="w-4 h-4" />
                                     {user}
                                 </button>
                             ))}
@@ -354,15 +393,17 @@ const MapperNews: React.FC = () => {
                 )}
 
                 {loading ? (
-                    <div className="flex justify-center items-center p-4">
-                        <span className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></span>
-                        <span className="ml-2 text-blue-500">
-                            {jobStatus === 'starting' && 'Starting map search...'}
-                            {jobStatus === 'pending' && 'Job queued, waiting to start...'}
-                            {jobStatus === 'processing' && 'Processing maps and leaderboards...'}
-                            {jobStatus === 'error' && 'Error occurred'}
-                            {!jobStatus && 'Loading maps and leaderboards...'}
-                        </span>
+                    <div className="racing-card text-center py-8">
+                        <div className="flex items-center justify-center mb-4">
+                            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mr-3" />
+                            <span className="text-primary font-medium">
+                                {jobStatus === 'starting' && 'Starting map search...'}
+                                {jobStatus === 'pending' && 'Job queued, waiting to start...'}
+                                {jobStatus === 'processing' && 'Processing maps and leaderboards...'}
+                                {jobStatus === 'error' && 'Error occurred'}
+                                {!jobStatus && 'Loading maps and leaderboards...'}
+                            </span>
+                        </div>
                         <button
                             onClick={() => {
                                 console.log('🛑 User cancelled search, stopping polling');
@@ -374,31 +415,43 @@ const MapperNews: React.FC = () => {
                                     pollingIntervalRef.current = null;
                                 }
                             }}
-                            className="ml-4 px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+                            className="px-4 py-2 bg-destructive text-destructive-foreground rounded-xl text-sm hover:bg-destructive/90 transition-colors duration-300"
                         >
                             Cancel
                         </button>
+                        {jobId && (
+                            <div className="mt-4 p-3 bg-muted rounded-xl">
+                                <p className="text-sm text-muted-foreground">
+                                    Job ID: <code className="text-foreground">{jobId}</code>
+                                </p>
+                            </div>
+                        )}
                     </div>
                 ) : error ? (
-                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                        <div className="flex items-center">
-                            <span className="text-red-500 mr-2">⚠️</span>
-                            <div>
-                                <strong>Operation Failed</strong>
-                                <p className="mt-1">{error}</p>
-                                {jobId && (
-                                    <p className="text-sm mt-2 text-red-600">
-                                        Job ID: {jobId}
-                                    </p>
-                                )}
+                    <div className="racing-card mb-8">
+                        <div className="p-4 bg-destructive/20 border border-destructive/30 rounded-xl text-destructive">
+                            <div className="flex items-center">
+                                <AlertCircle className="w-5 h-5 mr-3" />
+                                <div>
+                                    <strong>Operation Failed</strong>
+                                    <p className="mt-1">{error}</p>
+                                    {jobId && (
+                                        <p className="text-sm mt-2 text-destructive/80">
+                                            Job ID: {jobId}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
                 ) : (
                     selectedUser && (
-                        <div className="bg-white rounded-lg shadow p-6 mb-8">
+                        <div className="racing-card mb-8">
                             <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-2xl font-bold text-gray-900">Leaderboards by {selectedUser}</h3>
+                                <h3 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                                    <Trophy className="w-6 h-6" />
+                                    Leaderboards by {selectedUser}
+                                </h3>
                                 <button
                                     onClick={() => {
                                         console.log('🔄 Starting new search');
@@ -413,57 +466,58 @@ const MapperNews: React.FC = () => {
                                             pollingIntervalRef.current = null;
                                         }
                                     }}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="btn-racing-secondary flex items-center gap-2"
                                 >
-                                    🔄 New Search
+                                    <RefreshCw size={20} />
+                                    New Search
                                 </button>
                             </div>
                             {mapsAndLeaderboards.length > 0 ? (
                                 <div className="overflow-x-auto">
-                                    <table className="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm">
-                                        <thead className="bg-gray-50">
+                                    <table className="min-w-full bg-card border border-border rounded-xl shadow-sm">
+                                        <thead className="bg-muted/50">
                                             <tr>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                                                     Map Name
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                                                     Player Name
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                                                     Position
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                                                     Date
                                                 </th>
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border">
                                                     Time
                                                 </th>
                                             </tr>
                                         </thead>
-                                        <tbody className="bg-white divide-y divide-gray-200">
+                                        <tbody className="bg-card divide-y divide-border">
                                             {mapsAndLeaderboards.map((entry, idx) =>
                                                 entry.leaderboard && entry.leaderboard.length > 0 ?
                                                     entry.leaderboard.map((record: any, recordIdx: number) => (
-                                                        <tr key={`${idx}-${recordIdx}`} className="hover:bg-gray-50">
-                                                            <td className="px-4 py-3 text-sm text-gray-900 border-b">
+                                                        <tr key={`${idx}-${recordIdx}`} className="hover:bg-muted/30 transition-colors duration-200">
+                                                            <td className="px-4 py-3 text-sm text-foreground border-b border-border">
                                                                 {entry.mapName}
                                                             </td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900 border-b">
+                                                            <td className="px-4 py-3 text-sm text-foreground border-b border-border">
                                                                 {record.playerName || 'Unknown Player'}
                                                             </td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900 border-b">
+                                                            <td className="px-4 py-3 text-sm text-foreground border-b border-border">
                                                                 #{record.position}
                                                             </td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900 border-b">
+                                                            <td className="px-4 py-3 text-sm text-foreground border-b border-border">
                                                                 {formatDate(record.timestamp)}
                                                             </td>
-                                                            <td className="px-4 py-3 text-sm text-gray-900 border-b">
+                                                            <td className="px-4 py-3 text-sm text-foreground border-b border-border">
                                                                 {formatTime(record.timestamp)}
                                                             </td>
                                                         </tr>
                                                     )) : (
                                                         <tr key={`${idx}-no-records`}>
-                                                            <td colSpan={5} className="px-4 py-3 text-sm text-gray-500 italic text-center border-b">
+                                                            <td colSpan={5} className="px-4 py-3 text-sm text-muted-foreground italic text-center border-b border-border">
                                                                 No records found for {entry.mapName}
                                                             </td>
                                                         </tr>
@@ -473,21 +527,19 @@ const MapperNews: React.FC = () => {
                                     </table>
                                 </div>
                             ) : (
-                                <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-4">
-                                    <div className="flex items-center">
-                                        <span className="text-yellow-500 mr-2">ℹ️</span>
-                                        <div>
-                                            <strong>No Recent Records Found</strong>
-                                            <p className="mt-1">
-                                                No new records were found for {selectedUser}'s maps in the selected time period ({mapSearchPeriod === '1d' ? '1 day' : mapSearchPeriod === '1w' ? '1 week' : '1 month'}).
-                                                This could mean:
-                                            </p>
-                                            <ul className="mt-2 ml-4 list-disc text-sm">
-                                                <li>The maps don't have any recent activity</li>
-                                                <li>No players have set new records recently</li>
-                                                <li>Try selecting a longer time period above</li>
-                                            </ul>
-                                        </div>
+                                <div className="racing-card text-center py-12">
+                                    <MapPin className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                                    <h3 className="text-xl font-semibold mb-2">No Recent Records Found</h3>
+                                    <p className="text-muted-foreground mb-4">
+                                        No new records were found for {selectedUser}'s maps in the selected time period ({mapSearchPeriod === '1d' ? '1 day' : mapSearchPeriod === '1w' ? '1 week' : '1 month'}).
+                                    </p>
+                                    <div className="text-left max-w-md mx-auto">
+                                        <p className="text-sm text-muted-foreground mb-2">This could mean:</p>
+                                        <ul className="text-sm text-muted-foreground space-y-1">
+                                            <li>• The maps don't have any recent activity</li>
+                                            <li>• No players have set new records recently</li>
+                                            <li>• Try selecting a longer time period above</li>
+                                        </ul>
                                     </div>
                                 </div>
                             )}

@@ -203,34 +203,56 @@ const updateJobStatus = async (jobId, status, result = null, error = null) => {
 };
 
 exports.handler = async (event) => {
-    console.log('🗺️ mapSearchBackground Lambda triggered!', event);
+    console.log('🗺️ mapSearchBackground Lambda triggered from SQS!', event);
 
-    const { jobId, username, period } = event;
+    // Parse SQS event
+    const records = event.Records || [];
 
-    if (!jobId || !username) {
-        console.error('Missing required parameters: jobId and username');
-        return { statusCode: 400, body: 'Missing required parameters' };
+    if (records.length === 0) {
+        console.error('No SQS records found in event');
+        return { statusCode: 400, body: 'No SQS records found' };
     }
 
-    try {
-        // Update status to processing
-        await updateJobStatus(jobId, 'processing');
+    // Process each SQS record (should be one at a time due to batch_size = 1)
+    for (const record of records) {
+        try {
+            const messageBody = JSON.parse(record.body);
+            const { jobId, username, period } = messageBody;
 
-        // Fetch maps and leaderboards
-        const result = await fetchMapsAndLeaderboards(username, period);
+            console.log(`🔄 Processing job ${jobId} for user ${username}`);
 
-        // Update status to completed with results
-        await updateJobStatus(jobId, 'completed', result);
+            if (!jobId || !username) {
+                console.error('Missing required parameters: jobId and username');
+                continue;
+            }
 
-        console.log(`Job ${jobId} completed successfully`);
-        return { statusCode: 200, body: 'Job completed successfully' };
+            // Update status to processing
+            await updateJobStatus(jobId, 'processing');
 
-    } catch (error) {
-        console.error('Error processing job:', error);
+            // Fetch maps and leaderboards
+            const result = await fetchMapsAndLeaderboards(username, period);
 
-        // Update status to failed
-        await updateJobStatus(jobId, 'failed', null, error.message);
+            // Update status to completed with results
+            await updateJobStatus(jobId, 'completed', result);
 
-        return { statusCode: 500, body: 'Job failed' };
+            console.log(`✅ Job ${jobId} completed successfully`);
+
+        } catch (error) {
+            console.error('❌ Error processing SQS record:', error);
+
+            // Try to extract jobId from the record for error reporting
+            try {
+                const messageBody = JSON.parse(record.body);
+                const { jobId } = messageBody;
+
+                if (jobId) {
+                    await updateJobStatus(jobId, 'failed', null, error.message);
+                }
+            } catch (parseError) {
+                console.error('❌ Could not parse SQS record for error reporting:', parseError);
+            }
+        }
     }
+
+    return { statusCode: 200, body: 'SQS records processed' };
 };

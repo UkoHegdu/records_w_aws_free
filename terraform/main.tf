@@ -14,12 +14,9 @@ provider "aws" {
 
 # Data sources for AWS Parameter Store
 
+# SES Configuration - using existing email parameter
 data "aws_ssm_parameter" "email_user" {
   name = "/${var.environment}/EMAIL_USER"
-}
-
-data "aws_ssm_parameter" "email_pass" {
-  name = "/${var.environment}/EMAIL_PASS"
 }
 
 data "aws_ssm_parameter" "auth_api_url" {
@@ -91,6 +88,37 @@ resource "aws_sns_topic_subscription" "error_email" {
   # Note: You'll need to confirm this subscription via email
 }
 
+# SES Configuration
+# SES Identity (verified email address)
+resource "aws_ses_email_identity" "from_email" {
+  email = data.aws_ssm_parameter.email_user.value
+}
+
+# SES Configuration Set for tracking
+resource "aws_ses_configuration_set" "main" {
+  name = "${var.app_name}-ses-config"
+  
+  delivery_options {
+    tls_policy = "Require"
+  }
+  
+  reputation_metrics_enabled = true
+  sending_enabled           = true
+}
+
+# SES Event Destination for CloudWatch Logs
+resource "aws_ses_event_destination" "cloudwatch" {
+  name                   = "${var.app_name}-ses-cloudwatch"
+  configuration_set_name = aws_ses_configuration_set.main.name
+  enabled                = true
+  matching_types         = ["send", "reject", "bounce", "complaint", "delivery", "open", "click", "renderingFailure"]
+  
+  cloudwatch_destination {
+    default_value  = "default"
+    dimension_name = "MessageTag"
+    value_source   = "messageTag"
+  }
+}
 
 # S3 Bucket for Frontend
 resource "aws_s3_bucket" "frontend" {
@@ -260,6 +288,107 @@ resource "aws_dynamodb_table" "map_search_results" {
   }
 }
 
+# SQS Queue for Map Search Jobs (Free Tier: 1 million requests/month)
+resource "aws_sqs_queue" "map_search_queue" {
+  name                      = "${var.app_name}-map-search-queue"
+  visibility_timeout_seconds = 960  # 16 minutes (slightly longer than Lambda timeout)
+  message_retention_seconds  = 1209600  # 14 days
+  receive_wait_time_seconds  = 20  # Long polling to reduce costs
+  
+  # Dead letter queue for failed messages
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.map_search_dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = {
+    Name        = "${var.app_name}-map-search-queue"
+    Environment = var.environment
+  }
+}
+
+# Dead Letter Queue for failed map search jobs
+resource "aws_sqs_queue" "map_search_dlq" {
+  name                      = "${var.app_name}-map-search-dlq"
+  message_retention_seconds  = 1209600  # 14 days
+
+  tags = {
+    Name        = "${var.app_name}-map-search-dlq"
+    Environment = var.environment
+  }
+}
+
+# SQS Queue for Scheduler Jobs (Free Tier: 1 million requests/month)
+resource "aws_sqs_queue" "scheduler_queue" {
+  name                      = "${var.app_name}-scheduler-queue"
+  visibility_timeout_seconds = 960  # 16 minutes (slightly longer than Lambda timeout)
+  message_retention_seconds  = 1209600  # 14 days
+  receive_wait_time_seconds  = 20  # Long polling to reduce costs
+  
+  # Dead letter queue for failed messages
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.scheduler_dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = {
+    Name        = "${var.app_name}-scheduler-queue"
+    Environment = var.environment
+  }
+}
+
+# Dead Letter Queue for failed scheduler jobs
+resource "aws_sqs_queue" "scheduler_dlq" {
+  name                      = "${var.app_name}-scheduler-dlq"
+  message_retention_seconds  = 1209600  # 14 days
+
+  tags = {
+    Name        = "${var.app_name}-scheduler-dlq"
+    Environment = var.environment
+  }
+}
+
+# DynamoDB table for user sessions
+resource "aws_dynamodb_table" "user_sessions" {
+  name           = "${var.app_name}-user-sessions"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "session_id"
+
+  attribute {
+    name = "session_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
+  # Global Secondary Index for querying sessions by user
+  global_secondary_index {
+    name            = "user-sessions-index"
+    hash_key        = "user_id"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
+  # TTL for automatic cleanup of expired sessions (7 days)
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.app_name}-user-sessions"
+    Environment = var.environment
+  }
+}
+
 # IAM Role for Lambda
 resource "aws_iam_role" "lambda_role" {
   name = "${var.app_name}-lambda-role"
@@ -305,7 +434,24 @@ resource "aws_iam_role_policy" "lambda_dynamodb_policy" {
           aws_dynamodb_table.auth_tokens.arn,
           "${aws_dynamodb_table.auth_tokens.arn}/index/*",
           aws_dynamodb_table.map_search_results.arn,
-          "${aws_dynamodb_table.map_search_results.arn}/index/*"
+          "${aws_dynamodb_table.map_search_results.arn}/index/*",
+          aws_dynamodb_table.user_sessions.arn,
+          "${aws_dynamodb_table.user_sessions.arn}/index/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = [
+          aws_sqs_queue.map_search_queue.arn,
+          aws_sqs_queue.map_search_dlq.arn,
+          aws_sqs_queue.scheduler_queue.arn,
+          aws_sqs_queue.scheduler_dlq.arn
         ]
       },
       {
@@ -325,6 +471,14 @@ resource "aws_iam_role_policy" "lambda_dynamodb_policy" {
           "sns:Publish"
         ]
         Resource = aws_sns_topic.error_notifications.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -351,13 +505,13 @@ resource "aws_lambda_function" "mapSearch" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/mapSearch.handler"
   runtime         = "nodejs18.x"
-  timeout         = 600  # 10 minutes - Trackmania API rate limits prevent faster processing
+  timeout         = 30  # Reduced timeout since we're just queuing jobs
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
   environment {
     variables = {
       MAP_SEARCH_RESULTS_TABLE_NAME = aws_dynamodb_table.map_search_results.name
-      MAP_SEARCH_BACKGROUND_FUNCTION_NAME = aws_lambda_function.mapSearchBackground.function_name
+      MAP_SEARCH_QUEUE_URL = aws_sqs_queue.map_search_queue.url
       DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
       LEAD_API = data.aws_ssm_parameter.lead_api.value
       AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
@@ -380,6 +534,7 @@ resource "aws_lambda_function" "mapSearchBackground" {
   handler         = "lambda/mapSearchBackground.handler"
   runtime         = "nodejs18.x"
   timeout         = 900  # 15 minutes - maximum Lambda timeout
+  reserved_concurrent_executions = 2  # Limit to 2 concurrent executions
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
   environment {
@@ -390,6 +545,8 @@ resource "aws_lambda_function" "mapSearchBackground" {
       AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
       AUTHORIZATION = data.aws_ssm_parameter.authorization.value
       USER_AGENT = data.aws_ssm_parameter.user_agent.value
+      OCLIENT_ID = data.aws_ssm_parameter.oclient_id.value
+      OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
     }
   }
 
@@ -397,6 +554,14 @@ resource "aws_lambda_function" "mapSearchBackground" {
     aws_iam_role_policy_attachment.lambda_policy,
     aws_iam_role_policy.lambda_dynamodb_policy,
   ]
+}
+
+# SQS Event Source Mapping for mapSearchBackground
+resource "aws_lambda_event_source_mapping" "map_search_sqs_trigger" {
+  event_source_arn = aws_sqs_queue.map_search_queue.arn
+  function_name    = aws_lambda_function.mapSearchBackground.arn
+  batch_size       = 1  # Process one job at a time
+  maximum_batching_window_in_seconds = 5  # Wait up to 5 seconds to batch messages
 }
 
 # Lambda function to check job status
@@ -434,6 +599,7 @@ resource "aws_lambda_function" "login" {
     variables = {
       NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
       JWT_SECRET               = data.aws_ssm_parameter.jwt_secret.value
+      USER_SESSIONS_TABLE_NAME = aws_dynamodb_table.user_sessions.name
     }
   }
 
@@ -476,6 +642,7 @@ resource "aws_lambda_function" "create_alert" {
   environment {
     variables = {
       NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
     }
   }
 
@@ -541,14 +708,37 @@ resource "aws_lambda_function" "scheduler" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/scheduler.handler"
   runtime         = "nodejs18.x"
-  timeout         = 300  # 5 minutes for database operations
+  timeout         = 60  # 1 minute (just queuing jobs)
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
   environment {
     variables = {
       NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
-      EMAIL_USER = data.aws_ssm_parameter.email_user.value
-      EMAIL_PASS = data.aws_ssm_parameter.email_pass.value
+      SCHEDULER_QUEUE_URL = aws_sqs_queue.scheduler_queue.url
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Scheduler Processor Lambda for processing queued user checks
+resource "aws_lambda_function" "schedulerProcessor" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-scheduler-processor"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/schedulerProcessor.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 900  # 15 minutes
+  reserved_concurrent_executions = 3  # Allow 3 concurrent user checks
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      SES_FROM_EMAIL = data.aws_ssm_parameter.email_user.value
+      SES_CONFIGURATION_SET = aws_ses_configuration_set.main.name
       DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
       LEAD_API = data.aws_ssm_parameter.lead_api.value
       AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
@@ -565,6 +755,14 @@ resource "aws_lambda_function" "scheduler" {
   ]
 }
 
+# SQS Event Source Mapping for schedulerProcessor
+resource "aws_lambda_event_source_mapping" "scheduler_sqs_trigger" {
+  event_source_arn = aws_sqs_queue.scheduler_queue.arn
+  function_name    = aws_lambda_function.schedulerProcessor.arn
+  batch_size       = 1  # Process one user check at a time
+  maximum_batching_window_in_seconds = 5  # Wait up to 5 seconds to batch messages
+}
+
 resource "aws_lambda_function" "health" {
   filename         = "lambda_functions.zip"
   function_name    = "${var.app_name}-health"
@@ -573,6 +771,50 @@ resource "aws_lambda_function" "health" {
   runtime         = "nodejs18.x"
   timeout         = 30  # Quick health check
   source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+resource "aws_lambda_function" "refresh_token" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-refresh-token"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/refreshToken.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+      USER_SESSIONS_TABLE_NAME = aws_dynamodb_table.user_sessions.name
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+resource "aws_lambda_function" "logout" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-logout"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/logout.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+      USER_SESSIONS_TABLE_NAME = aws_dynamodb_table.user_sessions.name
+    }
+  }
 
   depends_on = [
     aws_iam_role_policy_attachment.lambda_policy,
@@ -716,6 +958,9 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
   }
 }
 
+# Log retention policies are managed manually via AWS CLI
+# This ensures Lambda-created log groups have proper retention without Terraform conflicts
+
 # CloudWatch Dashboard for Lambda Monitoring (Free Tier: 3 dashboards)
 resource "aws_cloudwatch_dashboard" "lambda_monitoring" {
   dashboard_name = "${var.app_name}-lambda-monitoring"
@@ -833,6 +1078,18 @@ resource "aws_api_gateway_deployment" "api_deployment" {
     aws_api_gateway_integration.account_names_options_integration,
     aws_api_gateway_method_response.account_names_options_200,
     aws_api_gateway_integration_response.account_names_options_integration_response,
+    aws_api_gateway_method.refresh_post,
+    aws_api_gateway_integration.refresh_integration,
+    aws_api_gateway_method.refresh_options,
+    aws_api_gateway_integration.refresh_options_integration,
+    aws_api_gateway_method_response.refresh_options_200,
+    aws_api_gateway_integration_response.refresh_options_integration_response,
+    aws_api_gateway_method.logout_post,
+    aws_api_gateway_integration.logout_integration,
+    aws_api_gateway_method.logout_options,
+    aws_api_gateway_integration.logout_options_integration,
+    aws_api_gateway_method_response.logout_options_200,
+    aws_api_gateway_integration_response.logout_options_integration_response,
   ]
 
   rest_api_id = aws_api_gateway_rest_api.api.id
@@ -858,6 +1115,10 @@ resource "aws_api_gateway_deployment" "api_deployment" {
       aws_api_gateway_integration.latest_options_integration.id,
       aws_api_gateway_method_response.latest_options_200.id,
       aws_api_gateway_integration_response.latest_options_integration_response.id,
+      aws_api_gateway_method.create_alert_get.id,
+      aws_api_gateway_integration.create_alert_get_integration.id,
+      aws_api_gateway_method.create_alert_delete.id,
+      aws_api_gateway_integration.create_alert_delete_integration.id,
       aws_api_gateway_method.create_alert_options.id,
       aws_api_gateway_integration.create_alert_options_integration.id,
       aws_api_gateway_method_response.create_alert_options_200.id,
@@ -874,6 +1135,18 @@ resource "aws_api_gateway_deployment" "api_deployment" {
       aws_api_gateway_integration.account_names_options_integration.id,
       aws_api_gateway_method_response.account_names_options_200.id,
       aws_api_gateway_integration_response.account_names_options_integration_response.id,
+      aws_api_gateway_method.refresh_post.id,
+      aws_api_gateway_integration.refresh_integration.id,
+      aws_api_gateway_method.refresh_options.id,
+      aws_api_gateway_integration.refresh_options_integration.id,
+      aws_api_gateway_method_response.refresh_options_200.id,
+      aws_api_gateway_integration_response.refresh_options_integration_response.id,
+      aws_api_gateway_method.logout_post.id,
+      aws_api_gateway_integration.logout_integration.id,
+      aws_api_gateway_method.logout_options.id,
+      aws_api_gateway_integration.logout_options_integration.id,
+      aws_api_gateway_method_response.logout_options_200.id,
+      aws_api_gateway_integration_response.logout_options_integration_response.id,
     ]))
   }
 

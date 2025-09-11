@@ -1,4 +1,5 @@
 // lambda/shared/oauthApiClient.js
+//authentication needed for fetching account names from the new trackmania api that uses oAuth2
 const axios = require('axios');
 const { DynamoDBClient, GetItemCommand, PutItemCommand } = require('@aws-sdk/client-dynamodb');
 const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');

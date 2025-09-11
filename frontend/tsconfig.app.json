@@ -29,6 +29,10 @@
   },
   "include": [
     "src",
-    "App.tsx"
+    "App.tsx",
+    "tailwind.config.ts"
+  ],
+  "exclude": [
+    "src/old files"
   ]
 }
