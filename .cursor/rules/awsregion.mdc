@@ -1,6 +1,0 @@
----
-description: aws region setting
-globs:
-alwaysApply: true
----
-AWS Lambda functions automatically get the AWS_REGION environment variable set by AWS at runtime - you don't need to (and shouldn't) set it manually in Terraform.

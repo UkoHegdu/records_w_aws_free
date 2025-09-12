@@ -1,4 +1,0 @@
----
-alwaysApply: true
----
-alll new integration resources in terraform should be under /api/v1 just like the others.

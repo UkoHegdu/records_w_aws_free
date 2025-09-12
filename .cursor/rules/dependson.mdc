@@ -1,4 +1,0 @@
----
-alwaysApply: true
----
-when adding new routes in terraform, check depends_on to not get CORS errors
