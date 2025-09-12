@@ -58,6 +58,8 @@ echo "   - getMapRecords.js"
 echo "   - accountNames.js"
 echo "   - scheduler.js"
 echo "   - health.js"
+echo "   - test.js"
+echo "   - testAdvanced.js"
 echo "   - shared/ (apiClient.js, oauthApiClient.js)"
 
 # Step 3: Apply Terraform Infrastructure

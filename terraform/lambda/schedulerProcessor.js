@@ -1,10 +1,11 @@
-// lambda/schedulerProcessor.js - Processes queued user checks
+// lambda/schedulerProcessor.js - Processes queued user checks and saves email bodies to DynamoDB
 const { fetchMapsAndLeaderboards } = require('./mapSearch');
 const { translateAccountNames } = require('./accountNames');
-const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
+const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
+const { marshall } = require('@aws-sdk/util-dynamodb');
 
-// Configure SES client
-const sesClient = new SESClient({ region: process.env.AWS_REGION });
+// Configure DynamoDB client
+const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 
 // Format new records for email
 async function formatNewRecords(records) {
@@ -36,36 +37,32 @@ async function formatNewRecords(records) {
     return formatted.trim();
 }
 
-// Send email using AWS SES
-async function sendEmail(to, subject, text) {
+// Save email body to DynamoDB for later sending
+async function saveEmailBodyToDynamoDB(userId, username, email, mapperContent) {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    const ttl = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days from now
+
+    const item = {
+        user_id: userId,
+        date: today,
+        username: username,
+        email: email,
+        mapper_content: mapperContent || '',
+        driver_content: '', // Will be filled by driver notification processor
+        ttl: ttl
+    };
+
     const params = {
-        Source: process.env.SES_FROM_EMAIL,
-        Destination: {
-            ToAddresses: [to]
-        },
-        Message: {
-            Subject: {
-                Data: subject,
-                Charset: 'UTF-8'
-            },
-            Body: {
-                Text: {
-                    Data: text,
-                    Charset: 'UTF-8'
-                }
-            }
-        },
-        ConfigurationSetName: process.env.SES_CONFIGURATION_SET
+        TableName: process.env.DAILY_EMAILS_TABLE_NAME,
+        Item: marshall(item)
     };
 
     try {
-        const command = new SendEmailCommand(params);
-        const result = await sesClient.send(command);
-        console.log(`✅ Email sent successfully to ${to}, MessageId: ${result.MessageId}`);
-        return result;
+        await dynamoClient.send(new PutItemCommand(params));
+        console.log(`✅ Email body saved to DynamoDB for user ${username}`);
+        return true;
     } catch (error) {
-        console.error(`❌ Failed to send email to ${to}:`, error.message);
-        console.error(error.stack);
+        console.error(`❌ Failed to save email body for ${username}:`, error.message);
         throw error;
     }
 }
@@ -77,21 +74,20 @@ const processUserCheck = async (username, email) => {
     try {
         const newRecords = await fetchMapsAndLeaderboards(username, '1d');
 
+        // Always save email body to DynamoDB, even if no new records
+        // This ensures driver notifications can still be added later
+        let mapperContent = '';
         if (newRecords.length > 0) {
             console.log(`📊 Found ${newRecords.length} new records for ${username}`);
-
-            const formattedRecords = await formatNewRecords(newRecords);
-
-            const subject = `New times in ${username}'s maps`;
-            const text = `New times have been driven on your map(s):\n\n${formattedRecords}`;
-
-            await sendEmail(email, subject, text);
-            console.log(`✅ Email sent to ${email}`);
-            return { success: true, recordsFound: newRecords.length };
+            mapperContent = await formatNewRecords(newRecords);
         } else {
             console.log(`ℹ️ No new records for ${username}`);
-            return { success: true, recordsFound: 0 };
         }
+
+        // Save email body to DynamoDB (will be sent later by email sender)
+        await saveEmailBodyToDynamoDB(username, username, email, mapperContent);
+
+        return { success: true, recordsFound: newRecords.length };
     } catch (error) {
         console.error(`❌ Error processing ${username}:`, error.message);
         throw error;

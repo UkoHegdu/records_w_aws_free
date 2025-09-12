@@ -5,6 +5,7 @@ const { Client } = require('pg');
 const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
 const { marshall } = require('@aws-sdk/util-dynamodb');
 const { v4: uuidv4 } = require('uuid');
+const { validateAndSanitizeInput, checkRateLimit } = require('./securityUtils');
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 
@@ -22,6 +23,29 @@ const getDbConnection = () => {
 exports.handler = async (event, context) => {
     console.log('🔐 Login Lambda triggered!', event);
 
+    // Security headers
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+        'Access-Control-Allow-Methods': 'POST,OPTIONS',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'Referrer-Policy': 'strict-origin-when-cross-origin'
+    };
+
+    // Rate limiting
+    const clientIP = event.requestContext?.identity?.sourceIp || 'unknown';
+    if (!checkRateLimit(`login:${clientIP}`, 5, 300000)) { // 5 attempts per 5 minutes
+        return {
+            statusCode: 429,
+            headers: headers,
+            body: JSON.stringify({ msg: 'Too many login attempts. Please try again later.' })
+        };
+    }
+
     // Parse request body
     let body;
     try {
@@ -30,30 +54,35 @@ exports.handler = async (event, context) => {
         console.error('Error parsing request body:', error);
         return {
             statusCode: 400,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
+            headers: headers,
             body: JSON.stringify({ msg: 'Invalid JSON in request body' })
         };
     }
 
-    const { email, password } = body;
+    // Validate and sanitize inputs
+    // The frontend sends username as email field, so we need to handle both cases
+    const emailOrUsername = body.email || body.username;
+    const emailValidation = validateAndSanitizeInput(emailOrUsername, 'string', { required: true });
 
-    if (!email || !password) {
+    if (!emailValidation.isValid) {
         return {
             statusCode: 400,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                'Access-Control-Allow-Methods': 'POST,OPTIONS'
-            },
-            body: JSON.stringify({ msg: 'Email and password are required' })
+            headers: headers,
+            body: JSON.stringify({ msg: emailValidation.error })
         };
     }
+
+    // For login, we don't validate password format - just check if it exists
+    if (!body.password || typeof body.password !== 'string') {
+        return {
+            statusCode: 400,
+            headers: headers,
+            body: JSON.stringify({ msg: 'Password is required' })
+        };
+    }
+
+    const { sanitized: emailOrUsernameSanitized } = emailValidation;
+    const password = body.password; // Use password as-is for login
 
     const client = getDbConnection();
 
@@ -61,20 +90,15 @@ exports.handler = async (event, context) => {
         await client.connect();
         console.log('✅ Connected to Neon database');
 
-        // Query user by email
-        const user = await client.query('SELECT * FROM users WHERE email = $1', [email]);
+        // Query user by email or username
+        const user = await client.query('SELECT * FROM users WHERE email = $1 OR username = $1', [emailOrUsernameSanitized]);
         console.log("DB user query result:", user.rows);
 
         if (!user.rows.length) {
-            console.log("No user found with that email.");
+            console.log("No user found with that email/username.");
             return {
                 statusCode: 401,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                    'Access-Control-Allow-Methods': 'POST,OPTIONS'
-                },
+                headers: headers,
                 body: JSON.stringify({ msg: 'Invalid credentials' })
             };
         }
@@ -82,18 +106,13 @@ exports.handler = async (event, context) => {
         // Compare password
         const match = await bcrypt.compare(password, user.rows[0].password);
         console.log("Password match result:", match);
-        console.log("user ", email, " tried to log in");
+        console.log("user ", emailOrUsernameSanitized, " tried to log in");
 
         if (!match) {
             console.log("Password does not match.");
             return {
                 statusCode: 401,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-                    'Access-Control-Allow-Methods': 'POST,OPTIONS'
-                },
+                headers: headers,
                 body: JSON.stringify({ msg: 'Invalid credentials' })
             };
         }

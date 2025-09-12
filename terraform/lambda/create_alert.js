@@ -1,6 +1,7 @@
 // lambda/create_alert.js
 const { Client } = require('pg');
 const jwt = require('jsonwebtoken');
+const { validateAndSanitizeInput, checkRateLimit } = require('./securityUtils');
 
 // Database connection using Neon
 const getDbConnection = () => {
@@ -40,7 +41,12 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS'
+        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'Referrer-Policy': 'strict-origin-when-cross-origin'
     };
 
     // Handle GET request - fetch alerts
@@ -146,6 +152,15 @@ async function handleCreateAlert(event, headers) {
             statusCode: 401,
             headers: headers,
             body: JSON.stringify({ msg: 'Unauthorized - invalid or missing token' })
+        };
+    }
+
+    // Rate limiting per user
+    if (!checkRateLimit(`create_alert:${userId}`, 10, 300000)) { // 10 alerts per 5 minutes
+        return {
+            statusCode: 429,
+            headers: headers,
+            body: JSON.stringify({ msg: 'Too many alert creation attempts. Please try again later.' })
         };
     }
 

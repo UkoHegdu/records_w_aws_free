@@ -1,6 +1,6 @@
 // lambda/driverNotificationProcessor.js
 const { Client } = require('pg');
-const { DynamoDBClient, GetItemCommand, PutItemCommand } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBClient, GetItemCommand, PutItemCommand, UpdateItemCommand } = require('@aws-sdk/client-dynamodb');
 const { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } = require('@aws-sdk/client-sqs');
 const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
 const apiClient = require('./shared/apiClient');
@@ -183,17 +183,37 @@ async function processDriverNotification(notification) {
             return { notificationSent: false, reason: 'User not in leaderboard' };
         }
 
-        // Check if position has changed (worsened)
-        if (currentPosition > notification.currentPosition) {
-            console.log(`📧 Position worsened for user ${notification.username}: ${notification.currentPosition} -> ${currentPosition}`);
+        // Check if position has changed
+        if (currentPosition !== notification.currentPosition) {
+            const positionImproved = currentPosition < notification.currentPosition;
+            const positionWorsened = currentPosition > notification.currentPosition;
 
-            // Update position in database
-            await updateNotificationPosition(notification.id, currentPosition);
+            if (positionWorsened) {
+                console.log(`📧 Position worsened for user ${notification.username}: ${notification.currentPosition} -> ${currentPosition}`);
+            } else {
+                console.log(`📈 Position improved for user ${notification.username}: ${notification.currentPosition} -> ${currentPosition}`);
+            }
 
-            // Send notification (placeholder - implement email sending)
-            await sendPositionNotification(notification, notification.currentPosition, currentPosition);
+            // Check if status should change based on position
+            const shouldBeInactive = currentPosition > 5;
+            const statusChanged = (notification.status === 'active' && shouldBeInactive) ||
+                (notification.status === 'inactive' && !shouldBeInactive);
 
-            return { notificationSent: true, oldPosition: notification.currentPosition, newPosition: currentPosition };
+            // Update position and status in database
+            await updateNotificationPositionAndStatus(notification.id, currentPosition, shouldBeInactive);
+
+            // Send notification if position worsened (moved down)
+            if (positionWorsened) {
+                await sendPositionNotification(notification, notification.currentPosition, currentPosition);
+            }
+
+            return {
+                notificationSent: positionWorsened,
+                oldPosition: notification.currentPosition,
+                newPosition: currentPosition,
+                statusChanged: statusChanged ? (shouldBeInactive ? 'inactive' : 'active') : null,
+                positionImproved: positionImproved
+            };
         } else {
             console.log(`✅ Position unchanged for user ${notification.username}: ${currentPosition}`);
             await updateNotificationLastChecked(notification.id);
@@ -284,13 +304,38 @@ async function updateNotificationPosition(notificationId, newPosition) {
     }
 }
 
-// Send position notification (placeholder)
-async function sendPositionNotification(notification, oldPosition, newPosition) {
-    console.log(`📧 Sending notification to user ${notification.username}: Position on ${notification.mapName} changed from ${oldPosition} to ${newPosition}`);
+// Update notification position and status
+async function updateNotificationPositionAndStatus(notificationId, newPosition, shouldBeInactive) {
+    const client = getDbConnection();
 
-    // TODO: Implement actual email notification
-    // This would integrate with your existing email service
-    // For now, just log the notification
+    try {
+        await client.connect();
+        const newStatus = shouldBeInactive ? 'inactive' : 'active';
+
+        await client.query(
+            'UPDATE driver_notifications SET current_position = $1, status = $2, last_checked = NOW() WHERE id = $3',
+            [newPosition, newStatus, notificationId]
+        );
+
+        console.log(`✅ Updated notification ${notificationId}: position=${newPosition}, status=${newStatus}`);
+    } catch (error) {
+        console.error('Error updating notification position and status:', error);
+    } finally {
+        await client.end();
+    }
+}
+
+// Add position notification to email body
+async function sendPositionNotification(notification, oldPosition, newPosition) {
+    console.log(`📧 Adding notification to email body for user ${notification.username}: Position on ${notification.mapName} changed from ${oldPosition} to ${newPosition}`);
+
+    // Format the driver notification content
+    const driverContent = `🏎️ Map: ${notification.mapName}\n` +
+        `📍 Position changed: #${oldPosition} → #${newPosition}\n` +
+        `📅 Detected: ${new Date().toLocaleString()}\n\n`;
+
+    // Add to email body in DynamoDB
+    await addDriverContentToEmailBody(notification.username, driverContent);
 }
 
 // Update job status in DynamoDB
@@ -315,5 +360,31 @@ async function updateJobStatus(jobId, status, metadata = {}) {
         console.log(`✅ Job ${jobId} status updated to ${status}`);
     } catch (error) {
         console.error('Error updating job status:', error);
+    }
+}
+
+// Add driver notification content to email body in DynamoDB
+async function addDriverContentToEmailBody(userId, driverContent) {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+
+    const params = {
+        TableName: process.env.DAILY_EMAILS_TABLE_NAME,
+        Key: marshall({
+            user_id: userId,
+            date: today
+        }),
+        UpdateExpression: 'SET driver_content = :driver_content',
+        ExpressionAttributeValues: marshall({
+            ':driver_content': driverContent
+        }),
+        ReturnValues: 'UPDATED_NEW'
+    };
+
+    try {
+        await dynamoClient.send(new UpdateItemCommand(params));
+        console.log(`✅ Driver content added to email body for user ${userId}`);
+    } catch (error) {
+        console.error(`❌ Error adding driver content for user ${userId}:`, error.message);
+        // Don't throw error - this shouldn't break the main flow
     }
 }

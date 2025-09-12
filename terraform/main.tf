@@ -412,6 +412,35 @@ resource "aws_dynamodb_table" "driver_notification_jobs" {
   }
 }
 
+# DynamoDB table for daily email bodies
+resource "aws_dynamodb_table" "daily_emails" {
+  name           = "${var.app_name}-daily-emails"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "user_id"
+  range_key      = "date"
+
+  attribute {
+    name = "user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "date"
+    type = "S"
+  }
+
+  # TTL for automatic cleanup of old emails (7 days)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.app_name}-daily-emails"
+    Environment = var.environment
+  }
+}
+
 # SQS Queue for Driver Notification Jobs (Free Tier: 1 million requests/month)
 resource "aws_sqs_queue" "driver_notification_queue" {
   name                      = "${var.app_name}-driver-notification-queue"
@@ -516,7 +545,8 @@ resource "aws_iam_role_policy" "step_functions_lambda_policy" {
         ]
         Resource = [
           aws_lambda_function.driver_notification_processor.arn,
-          aws_lambda_function.driver_notification_status_check.arn
+          aws_lambda_function.driver_notification_status_check.arn,
+          aws_lambda_function.email_sender.arn
         ]
       }
     ]
@@ -570,7 +600,9 @@ resource "aws_iam_role_policy" "lambda_dynamodb_policy" {
           aws_dynamodb_table.user_sessions.arn,
           "${aws_dynamodb_table.user_sessions.arn}/index/*",
           aws_dynamodb_table.driver_notification_jobs.arn,
-          "${aws_dynamodb_table.driver_notification_jobs.arn}/index/*"
+          "${aws_dynamodb_table.driver_notification_jobs.arn}/index/*",
+          aws_dynamodb_table.daily_emails.arn,
+          "${aws_dynamodb_table.daily_emails.arn}/index/*"
         ]
       },
       {
@@ -782,6 +814,10 @@ resource "aws_lambda_function" "create_alert" {
     }
   }
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.lambda_policy,
     aws_iam_role_policy.lambda_dynamodb_policy,
@@ -895,8 +931,7 @@ resource "aws_lambda_function" "schedulerProcessor" {
 
   environment {
     variables = {
-      SES_FROM_EMAIL = data.aws_ssm_parameter.email_user.value
-      SES_CONFIGURATION_SET = aws_ses_configuration_set.main.name
+      DAILY_EMAILS_TABLE_NAME = aws_dynamodb_table.daily_emails.name
       DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
       LEAD_API = data.aws_ssm_parameter.lead_api.value
       AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
@@ -1053,6 +1088,10 @@ resource "aws_lambda_function" "driver_notifications" {
     }
   }
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.lambda_policy,
     aws_iam_role_policy.lambda_dynamodb_policy,
@@ -1076,6 +1115,7 @@ resource "aws_lambda_function" "driver_notification_processor" {
       OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
       DRIVER_NOTIFICATION_QUEUE_URL = aws_sqs_queue.driver_notification_queue.url
       DRIVER_NOTIFICATION_JOBS_TABLE_NAME = aws_dynamodb_table.driver_notification_jobs.name
+      DAILY_EMAILS_TABLE_NAME = aws_dynamodb_table.daily_emails.name
     }
   }
 
@@ -1109,13 +1149,81 @@ resource "aws_lambda_function" "driver_notification_status_check" {
   ]
 }
 
+resource "aws_lambda_function" "email_sender" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-email-sender"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/emailSender.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      DAILY_EMAILS_TABLE_NAME = aws_dynamodb_table.daily_emails.name
+      SES_FROM_EMAIL = data.aws_ssm_parameter.email_user.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Test Lambda Function - Simple function to isolate API Gateway issues
+resource "aws_lambda_function" "test" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-test"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/test.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Advanced Test Lambda Function - With JWT validation
+resource "aws_lambda_function" "test_advanced" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-test-advanced"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/testAdvanced.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
 # Step Functions State Machine for Driver Notification Workflow
 resource "aws_sfn_state_machine" "driver_notification_workflow" {
   name     = "${var.app_name}-driver-notification-workflow"
   role_arn = aws_iam_role.step_functions_role.arn
 
   definition = jsonencode({
-    Comment = "Driver Notification Workflow - Sequential execution of processor and status check"
+    Comment = "Daily Email Workflow - Scheduler creates email body, driver processor adds info, then send"
     StartAt = "ProcessNotifications"
     States = {
       ProcessNotifications = {
@@ -1141,7 +1249,7 @@ resource "aws_sfn_state_machine" "driver_notification_workflow" {
       CheckStatus = {
         Type     = "Task"
         Resource = aws_lambda_function.driver_notification_status_check.arn
-        End      = true
+        Next     = "SendEmails"
         Retry = [
           {
             ErrorEquals     = ["States.ALL"]
@@ -1158,6 +1266,26 @@ resource "aws_sfn_state_machine" "driver_notification_workflow" {
           }
         ]
       }
+      SendEmails = {
+        Type     = "Task"
+        Resource = aws_lambda_function.email_sender.arn
+        End      = true
+        Retry = [
+          {
+            ErrorEquals     = ["States.ALL"]
+            IntervalSeconds = 2
+            MaxAttempts     = 3
+            BackoffRate     = 2.0
+          }
+        ]
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "EmailSendFailed"
+            ResultPath  = "$.error"
+          }
+        ]
+      }
       ProcessNotificationsFailed = {
         Type = "Fail"
         Cause = "Driver notification processing failed"
@@ -1165,6 +1293,10 @@ resource "aws_sfn_state_machine" "driver_notification_workflow" {
       StatusCheckFailed = {
         Type = "Fail"
         Cause = "Driver notification status check failed"
+      }
+      EmailSendFailed = {
+        Type = "Fail"
+        Cause = "Email sending failed"
       }
     }
   })
@@ -1177,7 +1309,8 @@ resource "aws_sfn_state_machine" "driver_notification_workflow" {
   depends_on = [
     aws_iam_role_policy.step_functions_lambda_policy,
     aws_lambda_function.driver_notification_processor,
-    aws_lambda_function.driver_notification_status_check
+    aws_lambda_function.driver_notification_status_check,
+    aws_lambda_function.email_sender
   ]
 }
 
@@ -1433,6 +1566,10 @@ resource "aws_api_gateway_deployment" "api_deployment" {
     aws_api_gateway_integration.alerts_options_integration,
     aws_api_gateway_method_response.alerts_options_200,
     aws_api_gateway_integration_response.alerts_options_integration_response,
+    aws_api_gateway_method.alerts_id_options,
+    aws_api_gateway_integration.alerts_id_options_integration,
+    aws_api_gateway_method_response.alerts_id_options_200,
+    aws_api_gateway_integration_response.alerts_id_options_integration_response,
     aws_api_gateway_method.login_post,
     aws_api_gateway_integration.login_integration,
     aws_api_gateway_method.login_options,
@@ -1507,6 +1644,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   triggers = {
     redeployment = sha1(jsonencode([
       "driver-endpoints-fixed-path-2025-01-11",
+      "lambda-lifecycle-fix-${timestamp()}",
       aws_api_gateway_method.maps_options.id,
       aws_api_gateway_integration.maps_options_integration.id,
       aws_api_gateway_method_response.maps_options_200.id,
@@ -1533,6 +1671,10 @@ resource "aws_api_gateway_deployment" "api_deployment" {
       aws_api_gateway_integration.alerts_options_integration.id,
       aws_api_gateway_method_response.alerts_options_200.id,
       aws_api_gateway_integration_response.alerts_options_integration_response.id,
+      aws_api_gateway_method.alerts_id_options.id,
+      aws_api_gateway_integration.alerts_id_options_integration.id,
+      aws_api_gateway_method_response.alerts_id_options_200.id,
+      aws_api_gateway_integration_response.alerts_id_options_integration_response.id,
       aws_api_gateway_method.login_options.id,
       aws_api_gateway_integration.login_options_integration.id,
       aws_api_gateway_method_response.login_options_200.id,
@@ -1587,6 +1729,22 @@ resource "aws_api_gateway_deployment" "api_deployment" {
       aws_api_gateway_integration.user_tm_username_options_integration.id,
       aws_api_gateway_method_response.user_tm_username_options_200.id,
       aws_api_gateway_integration_response.user_tm_username_options_integration_response.id,
+      aws_api_gateway_method.test_get.id,
+      aws_api_gateway_integration.test_get_integration.id,
+      aws_api_gateway_method.test_post.id,
+      aws_api_gateway_integration.test_post_integration.id,
+      aws_api_gateway_method.test_options.id,
+      aws_api_gateway_integration.test_options_integration.id,
+      aws_api_gateway_method_response.test_options_200.id,
+      aws_api_gateway_integration_response.test_options_integration_response.id,
+      aws_api_gateway_method.test_advanced_get.id,
+      aws_api_gateway_integration.test_advanced_get_integration.id,
+      aws_api_gateway_method.test_advanced_post.id,
+      aws_api_gateway_integration.test_advanced_post_integration.id,
+      aws_api_gateway_method.test_advanced_options.id,
+      aws_api_gateway_integration.test_advanced_options_integration.id,
+      aws_api_gateway_method_response.test_advanced_options_200.id,
+      aws_api_gateway_integration_response.test_advanced_options_integration_response.id,
     ]))
   }
 

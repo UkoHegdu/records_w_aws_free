@@ -3,6 +3,7 @@ const { Client } = require('pg');
 const jwt = require('jsonwebtoken');
 const apiClient = require('./shared/apiClient');
 const { formatTime } = require('./shared/timeFormatter');
+const { validateAndSanitizeInput, checkRateLimit } = require('./securityUtils');
 
 // Database connection using Neon
 const getDbConnection = () => {
@@ -41,7 +42,12 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
-        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS'
+        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+        'Referrer-Policy': 'strict-origin-when-cross-origin'
     };
 
     try {
@@ -173,6 +179,15 @@ async function handleGetNotifications(userId, headers) {
 async function handleCreateNotification(event, userId, headers) {
     console.log('➕ Creating driver notification...');
 
+    // Rate limiting per user
+    if (!checkRateLimit(`create_driver_notification:${userId}`, 5, 300000)) { // 5 notifications per 5 minutes
+        return {
+            statusCode: 429,
+            headers: headers,
+            body: JSON.stringify({ msg: 'Too many notification creation attempts. Please try again later.' })
+        };
+    }
+
     // Parse request body
     let body;
     try {
@@ -186,15 +201,28 @@ async function handleCreateNotification(event, userId, headers) {
         };
     }
 
-    const { mapUid, mapName } = body;
+    // Validate and sanitize inputs
+    const mapUidValidation = validateAndSanitizeInput(body.mapUid, 'mapUid', { required: true });
+    const mapNameValidation = validateAndSanitizeInput(body.mapName, 'string', { required: true, maxLength: 500 });
 
-    if (!mapUid || !mapName) {
+    if (!mapUidValidation.isValid) {
         return {
             statusCode: 400,
             headers: headers,
-            body: JSON.stringify({ msg: 'mapUid and mapName are required' })
+            body: JSON.stringify({ msg: mapUidValidation.error })
         };
     }
+
+    if (!mapNameValidation.isValid) {
+        return {
+            statusCode: 400,
+            headers: headers,
+            body: JSON.stringify({ msg: mapNameValidation.error })
+        };
+    }
+
+    const { sanitized: mapUid } = mapUidValidation;
+    const { sanitized: mapName } = mapNameValidation;
 
     const client = getDbConnection();
 
