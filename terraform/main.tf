@@ -389,6 +389,59 @@ resource "aws_dynamodb_table" "user_sessions" {
   }
 }
 
+# DynamoDB table for driver notification jobs
+resource "aws_dynamodb_table" "driver_notification_jobs" {
+  name           = "${var.app_name}-driver-notification-jobs"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "job_id"
+
+  attribute {
+    name = "job_id"
+    type = "S"
+  }
+
+  # TTL for automatic cleanup of old jobs (24 hours)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.app_name}-driver-notification-jobs"
+    Environment = var.environment
+  }
+}
+
+# SQS Queue for Driver Notification Jobs (Free Tier: 1 million requests/month)
+resource "aws_sqs_queue" "driver_notification_queue" {
+  name                      = "${var.app_name}-driver-notification-queue"
+  visibility_timeout_seconds = 960  # 16 minutes (slightly longer than Lambda timeout)
+  message_retention_seconds  = 1209600  # 14 days
+  receive_wait_time_seconds  = 20  # Long polling to reduce costs
+  
+  # Dead letter queue for failed messages
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.driver_notification_dlq.arn
+    maxReceiveCount     = 3
+  })
+
+  tags = {
+    Name        = "${var.app_name}-driver-notification-queue"
+    Environment = var.environment
+  }
+}
+
+# Dead Letter Queue for failed driver notification jobs
+resource "aws_sqs_queue" "driver_notification_dlq" {
+  name                      = "${var.app_name}-driver-notification-dlq"
+  message_retention_seconds  = 1209600  # 14 days
+
+  tags = {
+    Name        = "${var.app_name}-driver-notification-dlq"
+    Environment = var.environment
+  }
+}
+
 # IAM Role for Lambda
 resource "aws_iam_role" "lambda_role" {
   name = "${var.app_name}-lambda-role"
@@ -407,9 +460,88 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
+# IAM Role for Step Functions
+resource "aws_iam_role" "step_functions_role" {
+  name = "${var.app_name}-step-functions-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "states.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# IAM Role for EventBridge to invoke Step Functions
+resource "aws_iam_role" "eventbridge_step_functions_role" {
+  name = "${var.app_name}-eventbridge-step-functions-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "lambda_policy" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# IAM Policy for Step Functions to invoke Lambda functions
+resource "aws_iam_role_policy" "step_functions_lambda_policy" {
+  name = "${var.app_name}-step-functions-lambda-policy"
+  role = aws_iam_role.step_functions_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = [
+          aws_lambda_function.driver_notification_processor.arn,
+          aws_lambda_function.driver_notification_status_check.arn
+        ]
+      }
+    ]
+  })
+}
+
+# IAM Policy for EventBridge to invoke Step Functions
+resource "aws_iam_role_policy" "eventbridge_step_functions_policy" {
+  name = "${var.app_name}-eventbridge-step-functions-policy"
+  role = aws_iam_role.eventbridge_step_functions_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "states:StartExecution"
+        ]
+        Resource = [
+          aws_sfn_state_machine.driver_notification_workflow.arn
+        ]
+      }
+    ]
+  })
 }
 
 # DynamoDB and Parameter Store permissions for Lambda functions
@@ -436,7 +568,9 @@ resource "aws_iam_role_policy" "lambda_dynamodb_policy" {
           aws_dynamodb_table.map_search_results.arn,
           "${aws_dynamodb_table.map_search_results.arn}/index/*",
           aws_dynamodb_table.user_sessions.arn,
-          "${aws_dynamodb_table.user_sessions.arn}/index/*"
+          "${aws_dynamodb_table.user_sessions.arn}/index/*",
+          aws_dynamodb_table.driver_notification_jobs.arn,
+          "${aws_dynamodb_table.driver_notification_jobs.arn}/index/*"
         ]
       },
       {
@@ -451,7 +585,9 @@ resource "aws_iam_role_policy" "lambda_dynamodb_policy" {
           aws_sqs_queue.map_search_queue.arn,
           aws_sqs_queue.map_search_dlq.arn,
           aws_sqs_queue.scheduler_queue.arn,
-          aws_sqs_queue.scheduler_dlq.arn
+          aws_sqs_queue.scheduler_dlq.arn,
+          aws_sqs_queue.driver_notification_queue.arn,
+          aws_sqs_queue.driver_notification_dlq.arn
         ]
       },
       {
@@ -652,6 +788,28 @@ resource "aws_lambda_function" "create_alert" {
   ]
 }
 
+resource "aws_lambda_function" "get_user_profile" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-get-user-profile"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/getUserProfile.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
 resource "aws_lambda_function" "get_map_records" {
   filename         = "lambda_functions.zip"
   function_name    = "${var.app_name}-get-map-records"
@@ -822,11 +980,219 @@ resource "aws_lambda_function" "logout" {
   ]
 }
 
+# Driver Notifications Lambda Functions
+
+resource "aws_lambda_function" "map_search_driver" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-map-search-driver"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/mapSearchDriver.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+  ]
+}
+
+resource "aws_lambda_function" "verify_tm_username" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-verify-tm-username"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/verifyTmUsername.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+      DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
+      AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
+      AUTHORIZATION = data.aws_ssm_parameter.authorization.value
+      USER_AGENT = data.aws_ssm_parameter.user_agent.value
+      OCLIENT_ID = data.aws_ssm_parameter.oclient_id.value
+      OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+resource "aws_lambda_function" "driver_notifications" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-driver-notifications"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/driverNotifications.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+      DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
+      LEAD_API = data.aws_ssm_parameter.lead_api.value
+      AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
+      AUTHORIZATION = data.aws_ssm_parameter.authorization.value
+      USER_AGENT = data.aws_ssm_parameter.user_agent.value
+      OCLIENT_ID = data.aws_ssm_parameter.oclient_id.value
+      OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+resource "aws_lambda_function" "driver_notification_processor" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-driver-notification-processor"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/driverNotificationProcessor.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 900  # 15 minutes for processing
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      LEAD_API = data.aws_ssm_parameter.lead_api.value
+      OCLIENT_ID = data.aws_ssm_parameter.oclient_id.value
+      OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
+      DRIVER_NOTIFICATION_QUEUE_URL = aws_sqs_queue.driver_notification_queue.url
+      DRIVER_NOTIFICATION_JOBS_TABLE_NAME = aws_dynamodb_table.driver_notification_jobs.name
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+resource "aws_lambda_function" "driver_notification_status_check" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-driver-notification-status-check"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/driverNotificationStatusCheck.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 900  # 15 minutes for processing
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      LEAD_API = data.aws_ssm_parameter.lead_api.value
+      OCLIENT_ID = data.aws_ssm_parameter.oclient_id.value
+      OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Step Functions State Machine for Driver Notification Workflow
+resource "aws_sfn_state_machine" "driver_notification_workflow" {
+  name     = "${var.app_name}-driver-notification-workflow"
+  role_arn = aws_iam_role.step_functions_role.arn
+
+  definition = jsonencode({
+    Comment = "Driver Notification Workflow - Sequential execution of processor and status check"
+    StartAt = "ProcessNotifications"
+    States = {
+      ProcessNotifications = {
+        Type     = "Task"
+        Resource = aws_lambda_function.driver_notification_processor.arn
+        Next     = "CheckStatus"
+        Retry = [
+          {
+            ErrorEquals     = ["States.ALL"]
+            IntervalSeconds = 2
+            MaxAttempts     = 3
+            BackoffRate     = 2.0
+          }
+        ]
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "ProcessNotificationsFailed"
+            ResultPath  = "$.error"
+          }
+        ]
+      }
+      CheckStatus = {
+        Type     = "Task"
+        Resource = aws_lambda_function.driver_notification_status_check.arn
+        End      = true
+        Retry = [
+          {
+            ErrorEquals     = ["States.ALL"]
+            IntervalSeconds = 2
+            MaxAttempts     = 3
+            BackoffRate     = 2.0
+          }
+        ]
+        Catch = [
+          {
+            ErrorEquals = ["States.ALL"]
+            Next        = "StatusCheckFailed"
+            ResultPath  = "$.error"
+          }
+        ]
+      }
+      ProcessNotificationsFailed = {
+        Type = "Fail"
+        Cause = "Driver notification processing failed"
+      }
+      StatusCheckFailed = {
+        Type = "Fail"
+        Cause = "Driver notification status check failed"
+      }
+    }
+  })
+
+  tags = {
+    Name        = "${var.app_name}-driver-notification-workflow"
+    Environment = var.environment
+  }
+
+  depends_on = [
+    aws_iam_role_policy.step_functions_lambda_policy,
+    aws_lambda_function.driver_notification_processor,
+    aws_lambda_function.driver_notification_status_check
+  ]
+}
+
 # EventBridge rule for daily scheduler trigger at 5 AM CET (4 AM UTC)
 resource "aws_cloudwatch_event_rule" "scheduler_rule" {
   name                = "${var.app_name}-scheduler-rule"
   description         = "Trigger scheduler Lambda daily at 5 AM CET"
   schedule_expression = "cron(0 4 * * ? *)"  # 4 AM UTC = 5 AM CET (winter) / 6 AM CEST (summer)
+}
+
+# EventBridge rule for daily driver notification processing at 6 AM CET (5 AM UTC)
+resource "aws_cloudwatch_event_rule" "driver_notification_rule" {
+  name                = "${var.app_name}-driver-notification-rule"
+  description         = "Trigger driver notification processing daily at 6 AM CET"
+  schedule_expression = "cron(0 5 * * ? *)"  # 5 AM UTC = 6 AM CET (winter) / 7 AM CEST (summer)
 }
 
 # EventBridge target to invoke the scheduler Lambda
@@ -844,6 +1210,15 @@ resource "aws_lambda_permission" "allow_eventbridge_scheduler" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.scheduler_rule.arn
 }
+
+# EventBridge target to invoke the Step Functions workflow
+resource "aws_cloudwatch_event_target" "driver_notification_target" {
+  rule      = aws_cloudwatch_event_rule.driver_notification_rule.name
+  target_id = "DriverNotificationStepFunctionsTarget"
+  arn       = aws_sfn_state_machine.driver_notification_workflow.arn
+  role_arn  = aws_iam_role.eventbridge_step_functions_role.arn
+}
+
 
 # Permission for API Gateway to invoke the health Lambda
 resource "aws_lambda_permission" "api_gw_lambda_health" {
@@ -1048,12 +1423,16 @@ resource "aws_api_gateway_deployment" "api_deployment" {
     aws_api_gateway_integration.job_status_options_integration,
     aws_api_gateway_method_response.job_status_options_200,
     aws_api_gateway_integration_response.job_status_options_integration_response,
-    aws_api_gateway_method.create_alert_post,
-    aws_api_gateway_integration.create_alert_integration,
-    aws_api_gateway_method.create_alert_options,
-    aws_api_gateway_integration.create_alert_options_integration,
-    aws_api_gateway_method_response.create_alert_options_200,
-    aws_api_gateway_integration_response.create_alert_options_integration_response,
+    aws_api_gateway_method.alerts_get,
+    aws_api_gateway_integration.alerts_get_integration,
+    aws_api_gateway_method.alerts_post,
+    aws_api_gateway_integration.alerts_integration,
+    aws_api_gateway_method.alerts_delete,
+    aws_api_gateway_integration.alerts_delete_integration,
+    aws_api_gateway_method.alerts_options,
+    aws_api_gateway_integration.alerts_options_integration,
+    aws_api_gateway_method_response.alerts_options_200,
+    aws_api_gateway_integration_response.alerts_options_integration_response,
     aws_api_gateway_method.login_post,
     aws_api_gateway_integration.login_integration,
     aws_api_gateway_method.login_options,
@@ -1090,13 +1469,44 @@ resource "aws_api_gateway_deployment" "api_deployment" {
     aws_api_gateway_integration.logout_options_integration,
     aws_api_gateway_method_response.logout_options_200,
     aws_api_gateway_integration_response.logout_options_integration_response,
+    # Driver notification endpoints
+    aws_api_gateway_method.driver_maps_search_get,
+    aws_api_gateway_integration.driver_maps_search_integration,
+    aws_api_gateway_method.driver_maps_search_options,
+    aws_api_gateway_integration.driver_maps_search_options_integration,
+    aws_api_gateway_method_response.driver_maps_search_options_200,
+    aws_api_gateway_integration_response.driver_maps_search_options_integration_response,
+    aws_api_gateway_method.driver_notifications_get,
+    aws_api_gateway_integration.driver_notifications_get_integration,
+    aws_api_gateway_method.driver_notifications_post,
+    aws_api_gateway_integration.driver_notifications_post_integration,
+    aws_api_gateway_method.driver_notifications_delete,
+    aws_api_gateway_integration.driver_notifications_delete_integration,
+    aws_api_gateway_method.driver_notifications_options,
+    aws_api_gateway_integration.driver_notifications_options_integration,
+    aws_api_gateway_method_response.driver_notifications_options_200,
+    aws_api_gateway_integration_response.driver_notifications_options_integration_response,
+    aws_api_gateway_method.driver_notifications_id_options,
+    aws_api_gateway_integration.driver_notifications_id_options_integration,
+    aws_api_gateway_method_response.driver_notifications_id_options_200,
+    aws_api_gateway_integration_response.driver_notifications_id_options_integration_response,
+    # TM Username verification endpoints
+    aws_api_gateway_method.user_tm_username_get,
+    aws_api_gateway_integration.user_tm_username_get_integration,
+    aws_api_gateway_method.user_tm_username_post,
+    aws_api_gateway_integration.user_tm_username_post_integration,
+    aws_api_gateway_method.user_tm_username_options,
+    aws_api_gateway_integration.user_tm_username_options_integration,
+    aws_api_gateway_method_response.user_tm_username_options_200,
+    aws_api_gateway_integration_response.user_tm_username_options_integration_response,
   ]
 
   rest_api_id = aws_api_gateway_rest_api.api.id
   
-  # Force new deployment to pick up OPTIONS method and job status endpoint
+  # Force new deployment to pick up driver notification endpoints
   triggers = {
     redeployment = sha1(jsonencode([
+      "driver-endpoints-fixed-path-2025-01-11",
       aws_api_gateway_method.maps_options.id,
       aws_api_gateway_integration.maps_options_integration.id,
       aws_api_gateway_method_response.maps_options_200.id,
@@ -1115,14 +1525,14 @@ resource "aws_api_gateway_deployment" "api_deployment" {
       aws_api_gateway_integration.latest_options_integration.id,
       aws_api_gateway_method_response.latest_options_200.id,
       aws_api_gateway_integration_response.latest_options_integration_response.id,
-      aws_api_gateway_method.create_alert_get.id,
-      aws_api_gateway_integration.create_alert_get_integration.id,
-      aws_api_gateway_method.create_alert_delete.id,
-      aws_api_gateway_integration.create_alert_delete_integration.id,
-      aws_api_gateway_method.create_alert_options.id,
-      aws_api_gateway_integration.create_alert_options_integration.id,
-      aws_api_gateway_method_response.create_alert_options_200.id,
-      aws_api_gateway_integration_response.create_alert_options_integration_response.id,
+      aws_api_gateway_method.alerts_get.id,
+      aws_api_gateway_integration.alerts_get_integration.id,
+      aws_api_gateway_method.alerts_delete.id,
+      aws_api_gateway_integration.alerts_delete_integration.id,
+      aws_api_gateway_method.alerts_options.id,
+      aws_api_gateway_integration.alerts_options_integration.id,
+      aws_api_gateway_method_response.alerts_options_200.id,
+      aws_api_gateway_integration_response.alerts_options_integration_response.id,
       aws_api_gateway_method.login_options.id,
       aws_api_gateway_integration.login_options_integration.id,
       aws_api_gateway_method_response.login_options_200.id,
@@ -1147,6 +1557,36 @@ resource "aws_api_gateway_deployment" "api_deployment" {
       aws_api_gateway_integration.logout_options_integration.id,
       aws_api_gateway_method_response.logout_options_200.id,
       aws_api_gateway_integration_response.logout_options_integration_response.id,
+      # Driver notification endpoints
+      aws_api_gateway_method.driver_maps_search_get.id,
+      aws_api_gateway_integration.driver_maps_search_integration.id,
+      aws_api_gateway_method.driver_maps_search_options.id,
+      aws_api_gateway_integration.driver_maps_search_options_integration.id,
+      aws_api_gateway_method_response.driver_maps_search_options_200.id,
+      aws_api_gateway_integration_response.driver_maps_search_options_integration_response.id,
+      aws_api_gateway_method.driver_notifications_get.id,
+      aws_api_gateway_integration.driver_notifications_get_integration.id,
+      aws_api_gateway_method.driver_notifications_post.id,
+      aws_api_gateway_integration.driver_notifications_post_integration.id,
+      aws_api_gateway_method.driver_notifications_delete.id,
+      aws_api_gateway_integration.driver_notifications_delete_integration.id,
+      aws_api_gateway_method.driver_notifications_options.id,
+      aws_api_gateway_integration.driver_notifications_options_integration.id,
+      aws_api_gateway_method_response.driver_notifications_options_200.id,
+      aws_api_gateway_integration_response.driver_notifications_options_integration_response.id,
+      aws_api_gateway_method.driver_notifications_id_options.id,
+      aws_api_gateway_integration.driver_notifications_id_options_integration.id,
+      aws_api_gateway_method_response.driver_notifications_id_options_200.id,
+      aws_api_gateway_integration_response.driver_notifications_id_options_integration_response.id,
+      # TM Username verification endpoints
+      aws_api_gateway_method.user_tm_username_get.id,
+      aws_api_gateway_integration.user_tm_username_get_integration.id,
+      aws_api_gateway_method.user_tm_username_post.id,
+      aws_api_gateway_integration.user_tm_username_post_integration.id,
+      aws_api_gateway_method.user_tm_username_options.id,
+      aws_api_gateway_integration.user_tm_username_options_integration.id,
+      aws_api_gateway_method_response.user_tm_username_options_200.id,
+      aws_api_gateway_integration_response.user_tm_username_options_integration_response.id,
     ]))
   }
 

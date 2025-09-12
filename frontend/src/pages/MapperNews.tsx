@@ -294,6 +294,7 @@ const MapperNews: React.FC = () => {
                     </div>
                 )}
 
+                {/* Search by map author box */}
                 <div className="racing-card mb-8">
                     <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
                         <Search className="w-5 h-5" />
@@ -391,6 +392,7 @@ const MapperNews: React.FC = () => {
                         </div>
                     </div>
                 )}
+
 
                 {loading ? (
                     <div className="racing-card text-center py-8">

@@ -46,4 +46,4 @@ Fully serverless AWS application following best practices for "forever free" usa
 - **Security:** JWT tokens, bcrypt hashing, proper session management
 - **Reliability:** SQS queues, dead letter queues, retry logic, error handling
 - **Cost Optimization:** Log retention policies, reserved concurrency limits
-- **Scalability:** Serverless architecture, auto-scaling Lambda functions
+- **Scalability:** Scalable serverless architecture with controlled concurrency limits

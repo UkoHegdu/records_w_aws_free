@@ -57,6 +57,7 @@ resource "aws_api_gateway_resource" "users" {
   path_part   = "users"
 }
 
+
 resource "aws_api_gateway_resource" "search" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_resource.users.id
@@ -271,84 +272,108 @@ resource "aws_api_gateway_integration_response" "job_status_options_integration_
   }
 }
 
-#/users/create_alert POST
-resource "aws_api_gateway_resource" "create_alert" {
+#/users/alerts POST
+resource "aws_api_gateway_resource" "alerts" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  path_part   = "create_alert"
+  path_part   = "alerts"
   parent_id   = aws_api_gateway_resource.users.id
 }
 
-resource "aws_api_gateway_method" "create_alert_post" {
+resource "aws_api_gateway_method" "alerts_post" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.create_alert.id
+  resource_id   = aws_api_gateway_resource.alerts.id
   http_method   = "POST"
   authorization = "NONE"
+  
+  request_parameters = {
+    "method.request.header.Authorization" = false
+  }
 }
 
-resource "aws_api_gateway_integration" "create_alert_integration" {
+resource "aws_api_gateway_integration" "alerts_integration" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.create_alert.id
-  http_method = aws_api_gateway_method.create_alert_post.http_method
+  resource_id = aws_api_gateway_resource.alerts.id
+  http_method = aws_api_gateway_method.alerts_post.http_method
 
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.create_alert.invoke_arn
+  
+  request_parameters = {
+    "integration.request.header.Authorization" = "method.request.header.Authorization"
+  }
 }
 
-# GET method for fetching alerts - /users/create_alert
-resource "aws_api_gateway_method" "create_alert_get" {
+# GET method for fetching alerts - /users/alerts
+resource "aws_api_gateway_method" "alerts_get" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.create_alert.id
+  resource_id   = aws_api_gateway_resource.alerts.id
   http_method   = "GET"
   authorization = "NONE"
+  
+  request_parameters = {
+    "method.request.header.Authorization" = false
+  }
 }
 
-resource "aws_api_gateway_integration" "create_alert_get_integration" {
+resource "aws_api_gateway_integration" "alerts_get_integration" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.create_alert.id
-  http_method = aws_api_gateway_method.create_alert_get.http_method
+  resource_id = aws_api_gateway_resource.alerts.id
+  http_method = aws_api_gateway_method.alerts_get.http_method
 
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.create_alert.invoke_arn
+  
+  request_parameters = {
+    "integration.request.header.Authorization" = "method.request.header.Authorization"
+  }
 }
 
-# DELETE method for removing alerts - /users/create_alert/{id}
-resource "aws_api_gateway_resource" "create_alert_id" {
+# DELETE method for removing alerts - /users/alerts/{id}
+resource "aws_api_gateway_resource" "alerts_id" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_resource.create_alert.id
+  parent_id   = aws_api_gateway_resource.alerts.id
   path_part   = "{id}"
 }
 
-resource "aws_api_gateway_method" "create_alert_delete" {
+resource "aws_api_gateway_method" "alerts_delete" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.create_alert_id.id
+  resource_id   = aws_api_gateway_resource.alerts_id.id
   http_method   = "DELETE"
   authorization = "NONE"
+  
+  request_parameters = {
+    "method.request.header.Authorization" = false
+  }
 }
 
-resource "aws_api_gateway_integration" "create_alert_delete_integration" {
+resource "aws_api_gateway_integration" "alerts_delete_integration" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.create_alert_id.id
-  http_method = aws_api_gateway_method.create_alert_delete.http_method
+  resource_id = aws_api_gateway_resource.alerts_id.id
+  http_method = aws_api_gateway_method.alerts_delete.http_method
 
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.create_alert.invoke_arn
+  
+  request_parameters = {
+    "integration.request.header.Authorization" = "method.request.header.Authorization"
+  }
 }
 
-# OPTIONS method for CORS - /users/create_alert
-resource "aws_api_gateway_method" "create_alert_options" {
+# OPTIONS method for CORS - /users/alerts
+resource "aws_api_gateway_method" "alerts_options" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.create_alert.id
+  resource_id   = aws_api_gateway_resource.alerts.id
   http_method   = "OPTIONS"
   authorization = "NONE"
 }
 
-resource "aws_api_gateway_integration" "create_alert_options_integration" {
+resource "aws_api_gateway_integration" "alerts_options_integration" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.create_alert.id
-  http_method = aws_api_gateway_method.create_alert_options.http_method
+  resource_id = aws_api_gateway_resource.alerts.id
+  http_method = aws_api_gateway_method.alerts_options.http_method
 
   type = "MOCK"
   request_templates = {
@@ -356,10 +381,10 @@ resource "aws_api_gateway_integration" "create_alert_options_integration" {
   }
 }
 
-resource "aws_api_gateway_method_response" "create_alert_options_200" {
+resource "aws_api_gateway_method_response" "alerts_options_200" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.create_alert.id
-  http_method = aws_api_gateway_method.create_alert_options.http_method
+  resource_id = aws_api_gateway_resource.alerts.id
+  http_method = aws_api_gateway_method.alerts_options.http_method
   status_code = "200"
 
   response_parameters = {
@@ -369,11 +394,11 @@ resource "aws_api_gateway_method_response" "create_alert_options_200" {
   }
 }
 
-resource "aws_api_gateway_integration_response" "create_alert_options_integration_response" {
+resource "aws_api_gateway_integration_response" "alerts_options_integration_response" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  resource_id = aws_api_gateway_resource.create_alert.id
-  http_method = aws_api_gateway_method.create_alert_options.http_method
-  status_code = aws_api_gateway_method_response.create_alert_options_200.status_code
+  resource_id = aws_api_gateway_resource.alerts.id
+  http_method = aws_api_gateway_method.alerts_options.http_method
+  status_code = aws_api_gateway_method_response.alerts_options_200.status_code
 
   response_parameters = {
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
@@ -668,6 +693,30 @@ resource "aws_lambda_permission" "api_gw_lambda_user_search" {
   source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }
 
+# Ensure CORS headers are present on all 4XX responses
+resource "aws_api_gateway_gateway_response" "default_4xx" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  response_type = "DEFAULT_4XX"
+
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Headers" = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,DELETE,OPTIONS'"
+  }
+}
+
+# Ensure CORS headers are present on all 5XX responses
+resource "aws_api_gateway_gateway_response" "default_5xx" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  response_type = "DEFAULT_5XX"
+
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Headers" = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,DELETE,OPTIONS'"
+  }
+}
+
 resource "aws_lambda_permission" "api_gw_lambda_maps" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
@@ -734,7 +783,7 @@ resource "aws_lambda_permission" "api_gw_lambda_account_names" {
   source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }
 
-resource "aws_lambda_permission" "api_gw_lambda_create_alert" {
+resource "aws_lambda_permission" "api_gw_lambda_alerts" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.create_alert.function_name
@@ -916,4 +965,463 @@ resource "aws_lambda_permission" "api_gw_lambda_logout" {
   principal     = "apigateway.amazonaws.com"
 
   source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+#/users/profile GET
+resource "aws_api_gateway_resource" "profile" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.users.id
+  path_part   = "profile"
+}
+
+resource "aws_api_gateway_method" "profile_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.profile.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "profile_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.profile.id
+  http_method = aws_api_gateway_method.profile_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.get_user_profile.invoke_arn
+}
+
+# OPTIONS method for CORS - /users/profile
+resource "aws_api_gateway_method" "profile_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.profile.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "profile_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.profile.id
+  http_method = aws_api_gateway_method.profile_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "profile_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.profile.id
+  http_method = aws_api_gateway_method.profile_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "profile_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.profile.id
+  http_method = aws_api_gateway_method.profile_options.http_method
+  status_code = aws_api_gateway_method_response.profile_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+resource "aws_lambda_permission" "api_gw_lambda_profile" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.get_user_profile.function_name
+  principal     = "apigateway.amazonaws.com"
+
+  source_arn = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+# TM Username API Gateway Routes
+# /users/tm-username GET, POST
+resource "aws_api_gateway_resource" "user_tm_username" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.users.id
+  path_part   = "tm-username"
+}
+
+# GET method for checking TM username status
+resource "aws_api_gateway_method" "user_tm_username_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.user_tm_username.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "user_tm_username_get_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.user_tm_username.id
+  http_method = aws_api_gateway_method.user_tm_username_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.verify_tm_username.invoke_arn
+}
+
+# POST method for verifying and setting TM username
+resource "aws_api_gateway_method" "user_tm_username_post" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.user_tm_username.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "user_tm_username_post_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.user_tm_username.id
+  http_method = aws_api_gateway_method.user_tm_username_post.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.verify_tm_username.invoke_arn
+}
+
+# OPTIONS method for TM username endpoint
+resource "aws_api_gateway_method" "user_tm_username_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.user_tm_username.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "user_tm_username_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.user_tm_username.id
+  http_method = aws_api_gateway_method.user_tm_username_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+# Method response for TM username OPTIONS
+resource "aws_api_gateway_method_response" "user_tm_username_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.user_tm_username.id
+  http_method = aws_api_gateway_method.user_tm_username_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
+  }
+}
+
+# Integration response for TM username OPTIONS
+resource "aws_api_gateway_integration_response" "user_tm_username_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.user_tm_username.id
+  http_method = aws_api_gateway_method.user_tm_username_options.http_method
+  status_code = aws_api_gateway_method_response.user_tm_username_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'*'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
+  }
+}
+
+# Driver Notifications API Gateway Routes
+
+#/driver/maps/search GET
+resource "aws_api_gateway_resource" "driver" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  path_part   = "driver"
+  parent_id   = aws_api_gateway_resource.v1.id
+}
+
+resource "aws_api_gateway_resource" "driver_maps" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  path_part   = "maps"
+  parent_id   = aws_api_gateway_resource.driver.id
+}
+
+resource "aws_api_gateway_resource" "driver_maps_search" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  path_part   = "search"
+  parent_id   = aws_api_gateway_resource.driver_maps.id
+}
+
+resource "aws_api_gateway_method" "driver_maps_search_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.driver_maps_search.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "driver_maps_search_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_maps_search.id
+  http_method = aws_api_gateway_method.driver_maps_search_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.map_search_driver.invoke_arn
+}
+
+#/driver/notifications POST, GET, DELETE
+resource "aws_api_gateway_resource" "driver_notifications" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  path_part   = "notifications"
+  parent_id   = aws_api_gateway_resource.driver.id
+}
+
+# POST method for creating driver notifications
+resource "aws_api_gateway_method" "driver_notifications_post" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.driver_notifications.id
+  http_method   = "POST"
+  authorization = "NONE"
+  
+  request_parameters = {
+    "method.request.header.Authorization" = false
+  }
+}
+
+resource "aws_api_gateway_integration" "driver_notifications_post_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications.id
+  http_method = aws_api_gateway_method.driver_notifications_post.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.driver_notifications.invoke_arn
+  
+  request_parameters = {
+    "integration.request.header.Authorization" = "method.request.header.Authorization"
+  }
+}
+
+# GET method for fetching driver notifications
+resource "aws_api_gateway_method" "driver_notifications_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.driver_notifications.id
+  http_method   = "GET"
+  authorization = "NONE"
+  
+  request_parameters = {
+    "method.request.header.Authorization" = false
+  }
+}
+
+resource "aws_api_gateway_integration" "driver_notifications_get_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications.id
+  http_method = aws_api_gateway_method.driver_notifications_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.driver_notifications.invoke_arn
+  
+  request_parameters = {
+    "integration.request.header.Authorization" = "method.request.header.Authorization"
+  }
+}
+
+# DELETE method for removing driver notifications - /driver/notifications/{id}
+resource "aws_api_gateway_resource" "driver_notifications_id" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.driver_notifications.id
+  path_part   = "{id}"
+}
+
+resource "aws_api_gateway_method" "driver_notifications_delete" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.driver_notifications_id.id
+  http_method   = "DELETE"
+  authorization = "NONE"
+  
+  request_parameters = {
+    "method.request.header.Authorization" = false
+  }
+}
+
+resource "aws_api_gateway_integration" "driver_notifications_delete_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications_id.id
+  http_method = aws_api_gateway_method.driver_notifications_delete.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.driver_notifications.invoke_arn
+  
+  request_parameters = {
+    "integration.request.header.Authorization" = "method.request.header.Authorization"
+  }
+}
+
+# OPTIONS methods for CORS
+resource "aws_api_gateway_method" "driver_maps_search_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.driver_maps_search.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "driver_maps_search_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_maps_search.id
+  http_method = aws_api_gateway_method.driver_maps_search_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method" "driver_notifications_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.driver_notifications.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "driver_notifications_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications.id
+  http_method = aws_api_gateway_method.driver_notifications_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method" "driver_notifications_id_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.driver_notifications_id.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "driver_notifications_id_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications_id.id
+  http_method = aws_api_gateway_method.driver_notifications_id_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+# Method responses for CORS
+resource "aws_api_gateway_method_response" "driver_maps_search_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_maps_search.id
+  http_method = aws_api_gateway_method.driver_maps_search_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_method_response" "driver_notifications_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications.id
+  http_method = aws_api_gateway_method.driver_notifications_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_method_response" "driver_notifications_id_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications_id.id
+  http_method = aws_api_gateway_method.driver_notifications_id_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+# Integration responses for CORS
+resource "aws_api_gateway_integration_response" "driver_maps_search_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_maps_search.id
+  http_method = aws_api_gateway_method.driver_maps_search_options.http_method
+  status_code = aws_api_gateway_method_response.driver_maps_search_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "driver_notifications_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications.id
+  http_method = aws_api_gateway_method.driver_notifications_options.http_method
+  status_code = aws_api_gateway_method_response.driver_notifications_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+resource "aws_api_gateway_integration_response" "driver_notifications_id_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.driver_notifications_id.id
+  http_method = aws_api_gateway_method.driver_notifications_id_options.http_method
+  status_code = aws_api_gateway_method_response.driver_notifications_id_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'DELETE,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
+# Lambda permissions for TM username verification API
+resource "aws_lambda_permission" "api_gw_lambda_verify_tm_username" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.verify_tm_username.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+# Lambda permissions for driver notification APIs
+resource "aws_lambda_permission" "api_gw_lambda_map_search_driver" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.map_search_driver.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gw_lambda_driver_notifications" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.driver_notifications.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
 }

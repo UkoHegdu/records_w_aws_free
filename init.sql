@@ -4,6 +4,8 @@ create table users (
    username   text,
    email      text not null,
    password   text not null,
+   tm_username VARCHAR(255),
+   tm_account_id VARCHAR(255),
    created_at timestamp default now()
 );
 
@@ -47,3 +49,19 @@ insert into alerts (
            'teh_macho',
            'fantomass@gmail.com',
            now() );
+
+-- Indexes for performance optimization
+-- Index for TM account ID lookups (used in driver notifications)
+CREATE INDEX IF NOT EXISTS idx_users_tm_account_id ON users(tm_account_id);
+
+-- Index for email lookups (used in authentication)
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- Index for username lookups (used in authentication)
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+-- Index for alerts by user_id (used in mapper alerts)
+CREATE INDEX IF NOT EXISTS idx_alerts_user_id ON alerts(user_id);
+
+-- Index for alert_maps by alert_id (used in mapper alerts)
+CREATE INDEX IF NOT EXISTS idx_alert_maps_alert_id ON alert_maps(alert_id);

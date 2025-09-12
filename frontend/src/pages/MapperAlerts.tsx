@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Plus, Trash2, MapPin, Clock, User, Search, Mail } from 'lucide-react';
+import { Bell, Plus, Trash2, MapPin, Clock, User, Settings, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import apiClient from '../auth';
 
@@ -12,65 +12,28 @@ interface Alert {
     isActive: boolean;
 }
 
-const MapperAlerts: React.FC = () => {
-    // Original functionality states
-    const [usernameQuery, setUsernameQuery] = useState('');
-    const [matchedUsers, setMatchedUsers] = useState<string[]>([]);
-    const [selectedUser, setSelectedUser] = useState<string | null>(null);
-    const [email, setEmail] = useState('');
-    const [submitted, setSubmitted] = useState(false);
+interface UserProfile {
+    id: string;
+    email: string;
+    username: string;
+    createdAt: string;
+}
 
-    // New functionality states
+const MapperAlerts: React.FC = () => {
+    // State variables
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
     const [newMapId, setNewMapId] = useState('');
-    const [activeTab, setActiveTab] = useState<'create' | 'manage'>('create');
+    const [activeTab, setActiveTab] = useState<'info' | 'manage'>('info');
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [showAddAlertModal, setShowAddAlertModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [alertToDelete, setAlertToDelete] = useState<string | null>(null);
 
     useEffect(() => {
         fetchAlerts();
     }, []);
-
-    // Original functionality functions
-    const handleUsernameSearch = async () => {
-        try {
-            const res = await apiClient.get(
-                `/api/v1/users/search?username=${usernameQuery}`
-            );
-            setMatchedUsers(res.data.map((u: { Name: string }) => u.Name));
-        } catch (err) {
-            setMatchedUsers([]);
-            toast.error('Failed to search users');
-        }
-    };
-
-    const handleUserSelect = (username: string) => {
-        setSelectedUser(username);
-        setSubmitted(false);
-    };
-
-    const handleCreateAlert = async () => {
-        if (!selectedUser || !email) {
-            toast.error('Please select a user and enter your email');
-            return;
-        }
-        try {
-            await apiClient.post(`/api/v1/users/create_alert`, {
-                username: selectedUser,
-                email,
-            });
-            setSubmitted(true);
-            toast.success('Alert created successfully!');
-            // Reset form
-            setUsernameQuery('');
-            setMatchedUsers([]);
-            setSelectedUser(null);
-            setEmail('');
-        } catch (err) {
-            console.error('Failed to create alert:', err);
-            toast.error('Failed to create alert');
-        }
-    };
 
     const fetchAlerts = async () => {
         try {
@@ -79,8 +42,22 @@ const MapperAlerts: React.FC = () => {
             console.log('🔐 Access token present:', !!token);
             console.log('🔐 Token preview:', token ? token.substring(0, 20) + '...' : 'No token');
 
-            const response = await apiClient.get('/api/v1/users/create_alert');
-            setAlerts(response.data.alerts || []);
+            const response = await apiClient.get('/api/v1/users/alerts');
+            const alertsData = response.data.alerts || [];
+            setAlerts(alertsData);
+
+            // Extract username from alerts data if available
+            if (alertsData.length > 0 && !userProfile) {
+                const firstAlert = alertsData[0];
+                // The username is embedded in the mapName field like "Map for username"
+                const username = firstAlert.mapName?.replace('Map for ', '') || 'your';
+                setUserProfile({
+                    id: '1',
+                    email: '',
+                    username: username,
+                    createdAt: new Date().toISOString()
+                });
+            }
         } catch (error: any) {
             console.error('Error fetching alerts:', error);
             console.error('Error response:', error.response?.data);
@@ -101,7 +78,7 @@ const MapperAlerts: React.FC = () => {
         e.preventDefault();
 
         try {
-            const response = await apiClient.post('/api/v1/users/create_alert',
+            const response = await apiClient.post('/api/v1/users/alerts',
                 { mapId: newMapId }
             );
 
@@ -116,20 +93,47 @@ const MapperAlerts: React.FC = () => {
         }
     };
 
-    const handleDeleteAlert = async (alertId: string) => {
-        const confirmed = window.confirm(
-            'Are you sure? You will not receive any notifications about your maps anymore.'
-        );
+    const handleDeleteAlert = (alertId: string) => {
+        setAlertToDelete(alertId);
+        setShowDeleteModal(true);
+    };
 
-        if (!confirmed) return;
+    const handleConfirmDelete = async () => {
+        if (!alertToDelete) return;
 
         try {
-            await apiClient.delete(`/api/v1/users/create_alert/${alertId}`);
+            await apiClient.delete(`/api/v1/users/alerts/${alertToDelete}`);
             toast.success('Alert deleted successfully!');
             fetchAlerts();
+            setShowDeleteModal(false);
+            setAlertToDelete(null);
         } catch (error) {
             toast.error('Failed to delete alert');
         }
+    };
+
+    const handleCancelDelete = () => {
+        setShowDeleteModal(false);
+        setAlertToDelete(null);
+    };
+
+    const handleAddAlertClick = () => {
+        setShowAddAlertModal(true);
+    };
+
+    const handleConfirmAddAlert = async () => {
+        try {
+            await apiClient.post('/api/v1/users/alerts', {});
+            toast.success('Alert created successfully!');
+            setShowAddAlertModal(false);
+            fetchAlerts();
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Failed to create alert');
+        }
+    };
+
+    const handleCancelAddAlert = () => {
+        setShowAddAlertModal(false);
     };
 
     if (isLoading) {
@@ -157,123 +161,52 @@ const MapperAlerts: React.FC = () => {
                             <p className="text-muted-foreground">Get notified when someone drives your maps</p>
                         </div>
                     </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setActiveTab('info')}
+                            className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 flex items-center gap-2 ${activeTab === 'info'
+                                ? 'bg-gradient-to-r from-primary to-primary-glow text-white shadow-glow'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                }`}
+                        >
+                            <Info className="w-4 h-4" />
+                            Alert Info
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('manage')}
+                            className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 flex items-center gap-2 ${activeTab === 'manage'
+                                ? 'bg-gradient-to-r from-primary to-primary-glow text-white shadow-glow'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                }`}
+                        >
+                            <Settings className="w-4 h-4" />
+                            Manage Alerts
+                        </button>
+                    </div>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex gap-2 mb-8">
-                    <button
-                        onClick={() => setActiveTab('create')}
-                        className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${activeTab === 'create'
-                            ? 'bg-gradient-to-r from-primary to-primary-glow text-white shadow-glow'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                            }`}
-                    >
-                        <Bell className="w-4 h-4 inline mr-2" />
-                        Create Alert
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('manage')}
-                        className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${activeTab === 'manage'
-                            ? 'bg-gradient-to-r from-primary to-primary-glow text-white shadow-glow'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                            }`}
-                    >
-                        <User className="w-4 h-4 inline mr-2" />
-                        Manage Alerts
-                    </button>
-                </div>
 
-                {/* Create Alert Tab */}
-                {activeTab === 'create' && (
+                {/* Alert Info Tab */}
+                {activeTab === 'info' && (
                     <div className="space-y-6">
                         <div className="racing-card">
                             <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                                <Bell className="w-5 h-5" />
-                                Set up a mapper alert
+                                <Info className="w-5 h-5" />
+                                Alert Information
                             </h2>
-
-                            {/* Username Search */}
                             <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground mb-2">
-                                        🔍 First, pick your username
-                                    </label>
-                                    <div className="flex gap-4">
-                                        <div className="flex-1 relative">
-                                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-                                            <input
-                                                type="text"
-                                                value={usernameQuery}
-                                                onChange={(e) => setUsernameQuery(e.target.value)}
-                                                placeholder="Enter your TrackMania username"
-                                                className="w-full pl-12 pr-4 py-3 rounded-xl bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                                            />
-                                        </div>
-                                        <button
-                                            onClick={handleUsernameSearch}
-                                            className="btn-racing flex items-center gap-2"
-                                        >
-                                            <Search size={20} />
-                                            Search
-                                        </button>
-                                    </div>
+                                <p className="text-muted-foreground">
+                                    When you add an alert, it gets triggered once per day. It will fetch your username from trackmania exchange and go through all of your created maps and fetch new times driven in the past 24 hours. If any new times are found, you will get a notification email. If you want to stop the notifications, you can click on manage alerts and remove the alert.
+                                </p>
+                                <div className="bg-muted/50 p-4 rounded-xl">
+                                    <h3 className="font-semibold mb-2">How it works:</h3>
+                                    <ul className="text-sm text-muted-foreground space-y-1">
+                                        <li>• Daily checks at 5am UTC</li>
+                                        <li>• Email notifications for new records</li>
+                                        <li>• Track all your published maps</li>
+                                        <li>• Manage alerts from the Manage Alerts tab</li>
+                                    </ul>
                                 </div>
-
-                                {/* User Selection */}
-                                {matchedUsers.length > 0 && (
-                                    <div className="racing-card">
-                                        <h3 className="text-lg font-semibold mb-4">Please select a user:</h3>
-                                        <div className="grid gap-2">
-                                            {matchedUsers.map((user) => (
-                                                <button
-                                                    key={user}
-                                                    onClick={() => handleUserSelect(user)}
-                                                    className={`p-3 rounded-xl text-left transition-all duration-300 ${selectedUser === user
-                                                        ? 'bg-gradient-to-r from-primary/20 to-secondary-bright/20 text-primary border border-primary/30'
-                                                        : 'bg-muted hover:bg-muted/80 text-foreground'
-                                                        }`}
-                                                >
-                                                    <User className="w-4 h-4 inline mr-2" />
-                                                    {user}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Email Input */}
-                                {selectedUser && (
-                                    <div className="racing-card">
-                                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                            <Mail className="w-5 h-5" />
-                                            📧 Enter your e-mail to get alerts for {selectedUser}
-                                        </h3>
-                                        <div className="flex gap-4">
-                                            <div className="flex-1 relative">
-                                                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-                                                <input
-                                                    type="email"
-                                                    value={email}
-                                                    onChange={(e) => setEmail(e.target.value)}
-                                                    placeholder="Enter your email address"
-                                                    className="w-full pl-12 pr-4 py-3 rounded-xl bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                                                />
-                                            </div>
-                                            <button
-                                                onClick={handleCreateAlert}
-                                                className="btn-racing flex items-center gap-2"
-                                            >
-                                                <Bell size={20} />
-                                                Send me (daily) alerts for my maps
-                                            </button>
-                                        </div>
-                                        {submitted && (
-                                            <div className="mt-4 p-4 bg-green-500/20 border border-green-500/30 rounded-xl text-green-400">
-                                                ✅ You're subscribed for alerts!
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -284,13 +217,15 @@ const MapperAlerts: React.FC = () => {
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-xl font-semibold">Your Active Alerts</h2>
-                            <button
-                                onClick={() => setShowAddForm(true)}
-                                className="btn-racing flex items-center gap-2"
-                            >
-                                <Plus size={20} />
-                                Add Alert
-                            </button>
+                            {alerts.length === 0 && (
+                                <button
+                                    onClick={handleAddAlertClick}
+                                    className="btn-racing flex items-center gap-2"
+                                >
+                                    <Plus size={20} />
+                                    Add Alert
+                                </button>
+                            )}
                         </div>
 
                         {/* Add Alert Form */}
@@ -342,7 +277,7 @@ const MapperAlerts: React.FC = () => {
                                         Add your first map alert to get notifications when someone drives your maps
                                     </p>
                                     <button
-                                        onClick={() => setShowAddForm(true)}
+                                        onClick={handleAddAlertClick}
                                         className="btn-racing flex items-center gap-2 mx-auto"
                                     >
                                         <Plus size={20} />
@@ -396,6 +331,89 @@ const MapperAlerts: React.FC = () => {
                                     </div>
                                 ))
                             )}
+                        </div>
+                    </div>
+                )}
+
+
+                {/* Add Alert Modal */}
+                {showAddAlertModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="racing-card max-w-md mx-4">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-2 bg-gradient-to-br from-primary to-primary-glow rounded-lg">
+                                    <Bell className="w-5 h-5 text-white" />
+                                </div>
+                                <h2 className="text-xl font-semibold">Add Alert</h2>
+                            </div>
+                            <div className="space-y-4 mb-6">
+                                <p className="text-muted-foreground">
+                                    Alerts for new times in <strong>your</strong> maps will be sent out daily at 5am UTC.
+                                </p>
+                                <div className="bg-muted/50 p-4 rounded-xl">
+                                    <h3 className="font-semibold mb-2">What you'll receive:</h3>
+                                    <ul className="text-sm text-muted-foreground space-y-1">
+                                        <li>• Email notifications for new records</li>
+                                        <li>• Daily summary of activity</li>
+                                        <li>• Map details and record times</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handleCancelAddAlert}
+                                    className="flex-1 px-4 py-2 rounded-xl border border-border hover:bg-muted/50 transition-colors duration-300"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmAddAlert}
+                                    className="flex-1 btn-racing"
+                                >
+                                    OK
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Delete Confirmation Modal */}
+                {showDeleteModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="racing-card max-w-md mx-4">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-2 bg-gradient-to-br from-red-500 to-red-600 rounded-lg">
+                                    <Trash2 className="w-5 h-5 text-white" />
+                                </div>
+                                <h2 className="text-xl font-semibold">Delete Alert</h2>
+                            </div>
+                            <div className="space-y-4 mb-6">
+                                <p className="text-muted-foreground">
+                                    Are you sure you want to delete this alert? You will not receive any notifications about your maps anymore.
+                                </p>
+                                <div className="bg-muted/50 p-4 rounded-xl">
+                                    <h3 className="font-semibold mb-2">This action will:</h3>
+                                    <ul className="text-sm text-muted-foreground space-y-1">
+                                        <li>• Stop all email notifications for your maps</li>
+                                        <li>• Remove the alert permanently</li>
+                                        <li>• Cannot be undone</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handleCancelDelete}
+                                    className="flex-1 px-4 py-2 rounded-xl border border-border hover:bg-muted/50 transition-colors duration-300"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmDelete}
+                                    className="flex-1 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white transition-colors duration-300"
+                                >
+                                    Delete Alert
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

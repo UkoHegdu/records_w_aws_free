@@ -164,22 +164,30 @@ async function handleCreateAlert(event, headers) {
         };
     }
 
-    const { username, email } = body;
     console.log('Welcome to alert creation function, have a nice time!');
-
-    if (!username || !email) {
-        return {
-            statusCode: 400,
-            headers: headers,
-            body: JSON.stringify({ msg: 'Username and email are required' })
-        };
-    }
 
     const client = getDbConnection();
 
     try {
         await client.connect();
         console.log('✅ Connected to Neon database');
+
+        // Get user information from database using user_id from JWT token
+        const userResult = await client.query(
+            'SELECT username, email FROM users WHERE id = $1',
+            [userId]
+        );
+
+        if (userResult.rows.length === 0) {
+            return {
+                statusCode: 404,
+                headers: headers,
+                body: JSON.stringify({ msg: 'User not found' })
+            };
+        }
+
+        const { username, email } = userResult.rows[0];
+        console.log(`Creating alert for user: ${username} (${email})`);
 
         // Insert alert with actual user_id from JWT token
         await client.query(
