@@ -25,15 +25,41 @@ const MapperAlerts: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
     const [newMapId, setNewMapId] = useState('');
-    const [activeTab, setActiveTab] = useState<'info' | 'manage'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'manage' | 'test'>('info');
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [showAddAlertModal, setShowAddAlertModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [alertToDelete, setAlertToDelete] = useState<string | null>(null);
+    const [testResult, setTestResult] = useState<string>('');
+    const [testLoading, setTestLoading] = useState(false);
+    const [userLoginInfo, setUserLoginInfo] = useState<{ username: string, email: string } | null>(null);
+
+    // Test notification state (temporary, not persisted)
+    const [testNotifications, setTestNotifications] = useState<Array<{
+        id: string;
+        mapName: string;
+        mapUid: string;
+        currentPosition: number;
+        status: 'active' | 'inactive';
+        createdAt: string;
+    }>>([]);
 
     useEffect(() => {
         fetchAlerts();
+        fetchUserLoginInfo();
     }, []);
+
+    const fetchUserLoginInfo = async () => {
+        try {
+            const response = await apiClient.get('/api/v1/users/profile');
+            setUserLoginInfo({
+                username: response.data.username,
+                email: response.data.email
+            });
+        } catch (error) {
+            console.error('Error fetching user login info:', error);
+        }
+    };
 
     const fetchAlerts = async () => {
         try {
@@ -79,7 +105,7 @@ const MapperAlerts: React.FC = () => {
 
         try {
             const response = await apiClient.post('/api/v1/users/alerts',
-                { mapId: newMapId }
+                {}
             );
 
             if (response.data.success) {
@@ -110,6 +136,88 @@ const MapperAlerts: React.FC = () => {
         } catch (error) {
             toast.error('Failed to delete alert');
         }
+    };
+
+    const handleTestEndpoint = async () => {
+        setTestLoading(true);
+        setTestResult('');
+
+        try {
+            const response = await apiClient.post('/api/v1/test', {});
+            setTestResult(`✅ SUCCESS: Lambda called successfully! Response: ${JSON.stringify(response.data)}`);
+            toast.success('Test endpoint worked!');
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+            setTestResult(`❌ FAILED: ${errorMsg}`);
+            toast.error('Test endpoint failed');
+        } finally {
+            setTestLoading(false);
+        }
+    };
+
+    const handleTestAdvancedEndpoint = async () => {
+        setTestLoading(true);
+        setTestResult('');
+
+        try {
+            const response = await apiClient.post('/api/v1/test-advanced', {});
+            setTestResult(`✅ SUCCESS: Advanced Lambda called successfully! Response: ${JSON.stringify(response.data)}`);
+            toast.success('Advanced test endpoint worked!');
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+            setTestResult(`❌ FAILED: ${errorMsg}`);
+            toast.error('Advanced test endpoint failed');
+        } finally {
+            setTestLoading(false);
+        }
+    };
+
+    // Test functions for driver notifications
+    const handleCreateTestNotification = () => {
+        const newNotification = {
+            id: `test-${Date.now()}`,
+            mapName: `Test Map ${testNotifications.length + 1}`,
+            mapUid: `test-map-uid-${testNotifications.length + 1}`,
+            currentPosition: Math.floor(Math.random() * 5) + 1, // Random position 1-5 (active)
+            status: 'active' as const,
+            createdAt: new Date().toISOString()
+        };
+
+        setTestNotifications(prev => [...prev, newNotification]);
+        toast.success(`Created test notification: ${newNotification.mapName} (Position #${newNotification.currentPosition})`);
+    };
+
+    const handleMakeNotificationOrange = () => {
+        if (testNotifications.length === 0) {
+            toast.error('No test notifications to make orange! Create one first.');
+            return;
+        }
+
+        // Find the first active notification and make it inactive
+        const activeNotification = testNotifications.find(n => n.status === 'active');
+        if (!activeNotification) {
+            toast.error('No active notifications to make orange!');
+            return;
+        }
+
+        setTestNotifications(prev =>
+            prev.map(notification =>
+                notification.id === activeNotification.id
+                    ? {
+                        ...notification,
+                        status: 'inactive' as const,
+                        currentPosition: Math.floor(Math.random() * 10) + 6 // Position 6-15 (inactive)
+                    }
+                    : notification
+            )
+        );
+
+        toast.success(`Made notification orange: ${activeNotification.mapName} (Position #${Math.floor(Math.random() * 10) + 6})`);
+    };
+
+    const handleClearTestNotifications = () => {
+        setTestNotifications([]);
+        toast.success('Cleared all test notifications');
     };
 
     const handleCancelDelete = () => {
@@ -182,6 +290,16 @@ const MapperAlerts: React.FC = () => {
                             <Settings className="w-4 h-4" />
                             Manage Alerts
                         </button>
+                        <button
+                            onClick={() => setActiveTab('test')}
+                            className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 flex items-center gap-2 ${activeTab === 'test'
+                                ? 'bg-gradient-to-r from-primary to-primary-glow text-white shadow-glow'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                }`}
+                        >
+                            <Bell className="w-4 h-4" />
+                            Test Section
+                        </button>
                     </div>
                 </div>
 
@@ -227,6 +345,24 @@ const MapperAlerts: React.FC = () => {
                                 </button>
                             )}
                         </div>
+
+                        {/* User Login Info Display */}
+                        {userLoginInfo && (
+                            <div className="racing-card border-border/50 bg-muted/5">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex-shrink-0 w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
+                                        <User className="w-4 h-4 text-primary" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-foreground mb-1">Account Information</h3>
+                                        <div className="text-sm text-foreground">
+                                            <p className="text-green-600 font-medium">✓ Logged in as: <strong>{userLoginInfo.username}</strong></p>
+                                            <p className="text-muted-foreground text-xs mt-1">Email: {userLoginInfo.email}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Add Alert Form */}
                         {showAddForm && (
@@ -413,6 +549,146 @@ const MapperAlerts: React.FC = () => {
                                 >
                                     Delete Alert
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Test Section Tab */}
+                {activeTab === 'test' && (
+                    <div className="space-y-6">
+                        <div className="bg-card rounded-xl border border-border p-6">
+                            <h2 className="text-xl font-semibold mb-4">API Gateway Test Section</h2>
+                            <p className="text-muted-foreground mb-6">
+                                This section tests the simple test endpoint to isolate API Gateway issues.
+                            </p>
+
+                            <div className="space-y-4">
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={handleTestEndpoint}
+                                        disabled={testLoading}
+                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-primary-glow text-white rounded-xl font-medium hover:shadow-glow transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {testLoading ? 'Testing...' : 'Test Simple Endpoint'}
+                                    </button>
+                                    <button
+                                        onClick={handleTestAdvancedEndpoint}
+                                        disabled={testLoading}
+                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {testLoading ? 'Testing...' : 'Test Advanced Endpoint'}
+                                    </button>
+                                </div>
+
+                                {testResult && (
+                                    <div className="mt-4 p-4 rounded-xl border border-border bg-muted/50">
+                                        <h3 className="font-medium mb-2">Test Result:</h3>
+                                        <pre className="text-sm whitespace-pre-wrap break-words">
+                                            {testResult}
+                                        </pre>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Driver Notification Test Section */}
+                        <div className="bg-card rounded-xl border border-border p-6">
+                            <h2 className="text-xl font-semibold mb-4">Driver Notification Visual Test</h2>
+                            <p className="text-muted-foreground mb-6">
+                                Test the visual appearance of driver notifications without affecting the database.
+                                These notifications are temporary and will disappear when you refresh the page.
+                            </p>
+
+                            <div className="space-y-4">
+                                <div className="flex gap-4 flex-wrap">
+                                    <button
+                                        onClick={handleCreateTestNotification}
+                                        className="px-6 py-3 bg-gradient-to-r from-primary to-primary-glow text-white rounded-xl font-medium hover:shadow-glow transition-all duration-300"
+                                    >
+                                        Create Test Notification
+                                    </button>
+                                    <button
+                                        onClick={handleMakeNotificationOrange}
+                                        className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-300"
+                                    >
+                                        Make Notification Orange
+                                    </button>
+                                    <button
+                                        onClick={handleClearTestNotifications}
+                                        className="px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-300"
+                                    >
+                                        Clear All Test Notifications
+                                    </button>
+                                </div>
+
+                                {/* Test Notifications Display */}
+                                {testNotifications.length > 0 && (
+                                    <div className="mt-6">
+                                        <h3 className="font-medium mb-4">Test Notifications ({testNotifications.length})</h3>
+                                        <div className="space-y-3">
+                                            {testNotifications.map((notification) => {
+                                                const isInactive = notification.status === 'inactive';
+
+                                                return (
+                                                    <div key={notification.id} className={`racing-card ${isInactive ? 'border-orange-500/50 bg-orange-50/10' : ''}`}>
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-4 flex-1">
+                                                                <div className={`p-3 rounded-xl ${isInactive
+                                                                    ? 'bg-gradient-to-br from-orange-500 to-orange-600 shadow-orange-500/20'
+                                                                    : 'bg-gradient-to-br from-primary to-primary-glow shadow-glow'
+                                                                    }`}>
+                                                                    {isInactive ? (
+                                                                        <Bell className="w-5 h-5 text-white" />
+                                                                    ) : (
+                                                                        <Bell className="w-5 h-5 text-white" />
+                                                                    )}
+                                                                </div>
+
+                                                                <div className="flex-1">
+                                                                    <h3 className={`font-semibold mb-1 ${isInactive ? 'text-orange-600' : 'text-foreground'}`}>
+                                                                        {notification.mapName}
+                                                                    </h3>
+
+                                                                    <div className="flex items-center gap-6 text-sm text-muted-foreground mb-2">
+                                                                        <span>Map UID: {notification.mapUid}</span>
+                                                                        <span>Created: {new Date(notification.createdAt).toLocaleString()}</span>
+                                                                    </div>
+
+                                                                    <div className="flex items-center gap-4 text-sm">
+                                                                        {isInactive ? (
+                                                                            <span className="text-orange-600 font-medium">
+                                                                                Status: <strong>Inactive - No longer in top 5</strong>
+                                                                            </span>
+                                                                        ) : (
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <span className="text-foreground">
+                                                                                    Current Position: <strong>#{notification.currentPosition}</strong>
+                                                                                </span>
+                                                                                <span className="text-muted-foreground text-xs">
+                                                                                    Status: <strong>Active</strong>
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-4">
+                                                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${isInactive
+                                                                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
+                                                                    : 'bg-gradient-to-r from-primary to-primary-glow text-white'
+                                                                    }`}>
+                                                                    {isInactive ? 'Inactive' : `Position #${notification.currentPosition}`}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

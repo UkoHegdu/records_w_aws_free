@@ -58,6 +58,7 @@ const DriverPage: React.FC = () => {
     const [tmUsername, setTmUsername] = useState('');
     const [isVerifyingTmUsername, setIsVerifyingTmUsername] = useState(false);
     const [tmUsernameStatus, setTmUsernameStatus] = useState<{ hasTmUsername: boolean, tmUsername?: string } | null>(null);
+    const [hasSearched, setHasSearched] = useState(false);
 
     useEffect(() => {
         checkTmUsernameStatus();
@@ -128,6 +129,7 @@ const DriverPage: React.FC = () => {
         }
 
         setIsSearching(true);
+        setHasSearched(true);
         try {
             const response = await apiClient.get('/api/v1/driver/maps/search', {
                 params: {
@@ -187,6 +189,7 @@ const DriverPage: React.FC = () => {
                 setMapUid('');
                 setSearchResults([]);
                 setSearchPagination(null);
+                setHasSearched(false);
                 fetchNotifications();
             }
         } catch (error: any) {
@@ -195,7 +198,8 @@ const DriverPage: React.FC = () => {
                 setShowMapDetails(false);
                 setShowTmUsernameModal(true);
             } else {
-                setDialogMessage(error.response?.data?.msg || 'Failed to add notification');
+                const errorMsg = error.response?.data?.msg || 'Failed to add notification';
+                setDialogMessage(errorMsg);
                 setShowErrorDialog(true);
             }
         } finally {
@@ -331,6 +335,50 @@ const DriverPage: React.FC = () => {
                                 </button>
                             </div>
                         )}
+
+                        {/* TM Username Status Display */}
+                        {tmUsernameStatus && (
+                            <div className="racing-card border-border/50 bg-muted/5 mb-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex-shrink-0 w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
+                                        <User className="w-4 h-4 text-primary" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <h3 className="font-semibold text-foreground">Trackmania Username</h3>
+                                            {tmUsernameStatus.hasTmUsername && (
+                                                <button
+                                                    onClick={() => {
+                                                        setTmUsername(tmUsernameStatus.tmUsername || '');
+                                                        setShowTmUsernameModal(true);
+                                                    }}
+                                                    className="text-xs text-primary hover:text-primary-glow transition-colors underline"
+                                                >
+                                                    Edit
+                                                </button>
+                                            )}
+                                        </div>
+                                        {tmUsernameStatus.hasTmUsername ? (
+                                            <div className="text-sm text-foreground">
+                                                <p className="text-green-600 font-medium">✓ Connected as: <strong>{tmUsernameStatus.tmUsername}</strong></p>
+                                                <p className="text-muted-foreground text-xs mt-1">You can create driver notifications</p>
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm text-orange-600">
+                                                <p className="font-medium">⚠️ No Trackmania username set</p>
+                                                <p className="text-muted-foreground text-xs mt-1">Set your TM username to create driver notifications</p>
+                                                <button
+                                                    onClick={() => setShowTmUsernameModal(true)}
+                                                    className="mt-2 text-xs text-primary hover:text-primary-glow transition-colors underline"
+                                                >
+                                                    Set TM Username
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {notifications.length === 0 && !showSearchModal ? (
                             <div className="racing-card text-center py-12">
                                 <Target className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
@@ -443,6 +491,7 @@ const DriverPage: React.FC = () => {
                                         setSearchResults([]);
                                         setSearchPagination(null);
                                         setSelectedMap(null);
+                                        setHasSearched(false);
                                     }}
                                     className="p-2 text-muted-foreground hover:text-foreground transition-colors"
                                 >
@@ -458,7 +507,12 @@ const DriverPage: React.FC = () => {
                                         <input
                                             type="text"
                                             value={mapName}
-                                            onChange={(e) => setMapName(e.target.value)}
+                                            onChange={(e) => {
+                                                setMapName(e.target.value);
+                                                if (e.target.value.trim().length < 3) {
+                                                    setHasSearched(false);
+                                                }
+                                            }}
                                             placeholder="Enter map name..."
                                             className="w-full pl-12 pr-4 py-3 rounded-xl bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                                         />
@@ -468,7 +522,12 @@ const DriverPage: React.FC = () => {
                                         <input
                                             type="text"
                                             value={mapUid}
-                                            onChange={(e) => setMapUid(e.target.value)}
+                                            onChange={(e) => {
+                                                setMapUid(e.target.value);
+                                                if (e.target.value.trim().length < 3) {
+                                                    setHasSearched(false);
+                                                }
+                                            }}
                                             placeholder="Enter map UID..."
                                             className="w-full pl-12 pr-4 py-3 rounded-xl bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                                         />
@@ -536,6 +595,24 @@ const DriverPage: React.FC = () => {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+
+                            {/* No Results Found */}
+                            {hasSearched && !isSearching && searchResults.length === 0 && (
+                                <div className="text-center py-8">
+                                    <div className="w-16 h-16 mx-auto mb-4 bg-muted/50 rounded-full flex items-center justify-center">
+                                        <Search className="w-8 h-8 text-muted-foreground" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-foreground mb-2">No maps found</h3>
+                                    <p className="text-muted-foreground mb-4">
+                                        No maps match your search criteria. Try adjusting your search terms.
+                                    </p>
+                                    <div className="text-sm text-muted-foreground">
+                                        <p>• Make sure you have at least 3 characters</p>
+                                        <p>• Try searching by map name or map UID</p>
+                                        <p>• Check for typos in your search</p>
+                                    </div>
                                 </div>
                             )}
 
@@ -652,13 +729,17 @@ const DriverPage: React.FC = () => {
                                 <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
                                     <User className="w-5 h-5 text-white" />
                                 </div>
-                                <h2 className="text-xl font-semibold">Set Trackmania Username</h2>
+                                <h2 className="text-xl font-semibold">
+                                    {tmUsernameStatus?.hasTmUsername ? 'Edit Trackmania Username' : 'Set Trackmania Username'}
+                                </h2>
                             </div>
 
                             <div className="space-y-4 mb-6">
                                 <p className="text-muted-foreground">
-                                    To create driver notifications, you need to set your Trackmania username.
-                                    This will be used to check your position on leaderboards.
+                                    {tmUsernameStatus?.hasTmUsername
+                                        ? 'Update your Trackmania username. This will be used to check your position on leaderboards.'
+                                        : 'To create driver notifications, you need to set your Trackmania username. This will be used to check your position on leaderboards.'
+                                    }
                                 </p>
 
                                 <div className="relative">
@@ -667,7 +748,7 @@ const DriverPage: React.FC = () => {
                                         type="text"
                                         value={tmUsername}
                                         onChange={(e) => setTmUsername(e.target.value)}
-                                        placeholder="Enter your Trackmania username..."
+                                        placeholder={tmUsernameStatus?.hasTmUsername ? `Current: ${tmUsernameStatus.tmUsername}` : "Enter your Trackmania username..."}
                                         className="w-full pl-12 pr-4 py-3 rounded-xl bg-input border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                                     />
                                 </div>
@@ -697,7 +778,7 @@ const DriverPage: React.FC = () => {
                                     disabled={isVerifyingTmUsername || !tmUsername.trim()}
                                     className="flex-1 btn-racing-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {isVerifyingTmUsername ? 'Verifying...' : 'Verify & Save'}
+                                    {isVerifyingTmUsername ? 'Verifying...' : (tmUsernameStatus?.hasTmUsername ? 'Update Username' : 'Verify & Save')}
                                 </button>
                             </div>
                         </div>

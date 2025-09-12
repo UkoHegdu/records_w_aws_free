@@ -35,6 +35,7 @@ old_js/
 # IDE files
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
