@@ -284,10 +284,6 @@ resource "aws_api_gateway_method" "alerts_post" {
   resource_id   = aws_api_gateway_resource.alerts.id
   http_method   = "POST"
   authorization = "NONE"
-  
-  request_parameters = {
-    "method.request.header.Authorization" = false
-  }
 }
 
 resource "aws_api_gateway_integration" "alerts_integration" {
@@ -298,10 +294,6 @@ resource "aws_api_gateway_integration" "alerts_integration" {
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.create_alert.invoke_arn
-  
-  request_parameters = {
-    "integration.request.header.Authorization" = "method.request.header.Authorization"
-  }
 }
 
 # GET method for fetching alerts - /users/alerts
@@ -310,10 +302,6 @@ resource "aws_api_gateway_method" "alerts_get" {
   resource_id   = aws_api_gateway_resource.alerts.id
   http_method   = "GET"
   authorization = "NONE"
-  
-  request_parameters = {
-    "method.request.header.Authorization" = false
-  }
 }
 
 resource "aws_api_gateway_integration" "alerts_get_integration" {
@@ -324,10 +312,6 @@ resource "aws_api_gateway_integration" "alerts_get_integration" {
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.create_alert.invoke_arn
-  
-  request_parameters = {
-    "integration.request.header.Authorization" = "method.request.header.Authorization"
-  }
 }
 
 # DELETE method for removing alerts - /users/alerts/{id}
@@ -342,10 +326,6 @@ resource "aws_api_gateway_method" "alerts_delete" {
   resource_id   = aws_api_gateway_resource.alerts_id.id
   http_method   = "DELETE"
   authorization = "NONE"
-  
-  request_parameters = {
-    "method.request.header.Authorization" = false
-  }
 }
 
 resource "aws_api_gateway_integration" "alerts_delete_integration" {
@@ -356,10 +336,6 @@ resource "aws_api_gateway_integration" "alerts_delete_integration" {
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.create_alert.invoke_arn
-  
-  request_parameters = {
-    "integration.request.header.Authorization" = "method.request.header.Authorization"
-  }
 }
 
 # OPTIONS method for CORS - /users/alerts
@@ -402,7 +378,7 @@ resource "aws_api_gateway_integration_response" "alerts_options_integration_resp
 
   response_parameters = {
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-    "method.response.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS'"
     "method.response.header.Access-Control-Allow-Origin" = "'*'"
   }
 }
@@ -1187,10 +1163,6 @@ resource "aws_api_gateway_method" "driver_notifications_post" {
   resource_id   = aws_api_gateway_resource.driver_notifications.id
   http_method   = "POST"
   authorization = "NONE"
-  
-  request_parameters = {
-    "method.request.header.Authorization" = false
-  }
 }
 
 resource "aws_api_gateway_integration" "driver_notifications_post_integration" {
@@ -1201,10 +1173,6 @@ resource "aws_api_gateway_integration" "driver_notifications_post_integration" {
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.driver_notifications.invoke_arn
-  
-  request_parameters = {
-    "integration.request.header.Authorization" = "method.request.header.Authorization"
-  }
 }
 
 # GET method for fetching driver notifications
@@ -1213,10 +1181,6 @@ resource "aws_api_gateway_method" "driver_notifications_get" {
   resource_id   = aws_api_gateway_resource.driver_notifications.id
   http_method   = "GET"
   authorization = "NONE"
-  
-  request_parameters = {
-    "method.request.header.Authorization" = false
-  }
 }
 
 resource "aws_api_gateway_integration" "driver_notifications_get_integration" {
@@ -1227,10 +1191,6 @@ resource "aws_api_gateway_integration" "driver_notifications_get_integration" {
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.driver_notifications.invoke_arn
-  
-  request_parameters = {
-    "integration.request.header.Authorization" = "method.request.header.Authorization"
-  }
 }
 
 # DELETE method for removing driver notifications - /driver/notifications/{id}
@@ -1245,10 +1205,6 @@ resource "aws_api_gateway_method" "driver_notifications_delete" {
   resource_id   = aws_api_gateway_resource.driver_notifications_id.id
   http_method   = "DELETE"
   authorization = "NONE"
-  
-  request_parameters = {
-    "method.request.header.Authorization" = false
-  }
 }
 
 resource "aws_api_gateway_integration" "driver_notifications_delete_integration" {
@@ -1259,10 +1215,6 @@ resource "aws_api_gateway_integration" "driver_notifications_delete_integration"
   integration_http_method = "POST"
   type                   = "AWS_PROXY"
   uri                    = aws_lambda_function.driver_notifications.invoke_arn
-  
-  request_parameters = {
-    "integration.request.header.Authorization" = "method.request.header.Authorization"
-  }
 }
 
 # OPTIONS methods for CORS
