@@ -1,0 +1,67 @@
+/* Status-based styling classes */
+.status-success {
+    @apply text-green-800 bg-green-50 border-green-200 dark:text-green-200 dark:bg-green-950/20 dark:border-green-800;
+}
+
+.status-partial {
+    @apply text-orange-800 bg-orange-50 border-orange-200 dark:text-orange-200 dark:bg-orange-950/20 dark:border-orange-800;
+}
+
+.status-error {
+    @apply text-red-800 bg-red-50 border-red-200 dark:text-red-200 dark:bg-red-950/20 dark:border-red-800;
+}
+
+.status-default {
+    @apply text-gray-800 bg-gray-50 border-gray-200 dark:text-gray-200 dark:bg-gray-950/20 dark:border-gray-800;
+}
+
+/* Notification status classes */
+.notification-sent {
+    @apply bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800;
+}
+
+.notification-no-new-times {
+    @apply bg-gray-50 dark:bg-gray-950/20 border-gray-200 dark:border-gray-800;
+}
+
+.notification-technical-error {
+    @apply bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800;
+}
+
+.notification-default {
+    @apply bg-gray-50 dark:bg-gray-950/20 border-gray-200 dark:border-gray-800;
+}
+
+/* Status icon classes */
+.status-icon-success {
+    @apply text-green-500;
+}
+
+.status-icon-partial {
+    @apply text-orange-500;
+}
+
+.status-icon-error {
+    @apply text-red-500;
+}
+
+.status-icon-default {
+    @apply text-gray-500;
+}
+
+/* Notification icon classes */
+.notification-icon-sent {
+    @apply text-green-500;
+}
+
+.notification-icon-no-new-times {
+    @apply text-gray-500;
+}
+
+.notification-icon-technical-error {
+    @apply text-red-500;
+}
+
+.notification-icon-default {
+    @apply text-gray-500;
+}

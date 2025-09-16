@@ -7,9 +7,11 @@ import {
     User,
     LogIn,
     LogOut,
-    Flag
+    Flag,
+    Settings
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { isAdmin } from '../../auth';
 
 interface SidebarProps {
     isLoggedIn: boolean;
@@ -25,8 +27,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isLoggedIn, onLogout }) => {
         { path: '/', icon: Home, label: 'Home', requiresAuth: false },
         ...(isLoggedIn ? [
             { path: '/MapperAlerts', icon: Bell, label: 'Mapper Alerts', requiresAuth: true },
-            { path: '/MapperNews', icon: Trophy, label: 'Newest Times', requiresAuth: true },
             { path: '/DriverNotifications', icon: User, label: 'Driver Page', requiresAuth: true },
+            ...(isAdmin() ? [
+                { path: '/MapperNews', icon: Trophy, label: 'Newest Times', requiresAuth: true, adminOnly: true },
+                { path: '/Admin', icon: Settings, label: 'Admin', requiresAuth: true, adminOnly: true },
+            ] : []),
         ] : [])
     ];
 

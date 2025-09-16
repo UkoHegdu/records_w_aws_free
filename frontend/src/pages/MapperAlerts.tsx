@@ -19,35 +19,52 @@ interface UserProfile {
     createdAt: string;
 }
 
+interface NotificationHistory {
+    date: string;
+    mapper_alert: {
+        status: string;
+        message: string;
+        records_found: number;
+        created_at: string;
+    } | null;
+    driver_notification: {
+        status: string;
+        message: string;
+        records_found: number;
+        created_at: string;
+    } | null;
+}
+
 const MapperAlerts: React.FC = () => {
     // State variables
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
     const [newMapId, setNewMapId] = useState('');
-    const [activeTab, setActiveTab] = useState<'info' | 'manage' | 'test'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'manage'>('info');
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [showAddAlertModal, setShowAddAlertModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [alertToDelete, setAlertToDelete] = useState<string | null>(null);
-    const [testResult, setTestResult] = useState<string>('');
-    const [testLoading, setTestLoading] = useState(false);
     const [userLoginInfo, setUserLoginInfo] = useState<{ username: string, email: string } | null>(null);
+    const [notificationHistory, setNotificationHistory] = useState<NotificationHistory[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
-    // Test notification state (temporary, not persisted)
-    const [testNotifications, setTestNotifications] = useState<Array<{
-        id: string;
-        mapName: string;
-        mapUid: string;
-        currentPosition: number;
-        status: 'active' | 'inactive';
-        createdAt: string;
-    }>>([]);
 
     useEffect(() => {
         fetchAlerts();
         fetchUserLoginInfo();
     }, []);
+
+    // Only fetch notification history if user has alerts
+    useEffect(() => {
+        if (alerts.length > 0) {
+            fetchNotificationHistory();
+        } else {
+            // Clear notification history if no alerts
+            setNotificationHistory([]);
+        }
+    }, [alerts.length]);
 
     const fetchUserLoginInfo = async () => {
         try {
@@ -58,6 +75,18 @@ const MapperAlerts: React.FC = () => {
             });
         } catch (error) {
             console.error('Error fetching user login info:', error);
+        }
+    };
+
+    const fetchNotificationHistory = async () => {
+        try {
+            setHistoryLoading(true);
+            const response = await apiClient.get('/api/v1/notification-history');
+            setNotificationHistory(response.data.history);
+        } catch (error) {
+            console.error('Error fetching notification history:', error);
+        } finally {
+            setHistoryLoading(false);
         }
     };
 
@@ -138,87 +167,10 @@ const MapperAlerts: React.FC = () => {
         }
     };
 
-    const handleTestEndpoint = async () => {
-        setTestLoading(true);
-        setTestResult('');
 
-        try {
-            const response = await apiClient.post('/api/v1/test', {});
-            setTestResult(`✅ SUCCESS: Lambda called successfully! Response: ${JSON.stringify(response.data)}`);
-            toast.success('Test endpoint worked!');
-        } catch (error: any) {
-            const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
-            setTestResult(`❌ FAILED: ${errorMsg}`);
-            toast.error('Test endpoint failed');
-        } finally {
-            setTestLoading(false);
-        }
-    };
 
-    const handleTestAdvancedEndpoint = async () => {
-        setTestLoading(true);
-        setTestResult('');
 
-        try {
-            const response = await apiClient.post('/api/v1/test-advanced', {});
-            setTestResult(`✅ SUCCESS: Advanced Lambda called successfully! Response: ${JSON.stringify(response.data)}`);
-            toast.success('Advanced test endpoint worked!');
-        } catch (error: any) {
-            const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
-            setTestResult(`❌ FAILED: ${errorMsg}`);
-            toast.error('Advanced test endpoint failed');
-        } finally {
-            setTestLoading(false);
-        }
-    };
 
-    // Test functions for driver notifications
-    const handleCreateTestNotification = () => {
-        const newNotification = {
-            id: `test-${Date.now()}`,
-            mapName: `Test Map ${testNotifications.length + 1}`,
-            mapUid: `test-map-uid-${testNotifications.length + 1}`,
-            currentPosition: Math.floor(Math.random() * 5) + 1, // Random position 1-5 (active)
-            status: 'active' as const,
-            createdAt: new Date().toISOString()
-        };
-
-        setTestNotifications(prev => [...prev, newNotification]);
-        toast.success(`Created test notification: ${newNotification.mapName} (Position #${newNotification.currentPosition})`);
-    };
-
-    const handleMakeNotificationOrange = () => {
-        if (testNotifications.length === 0) {
-            toast.error('No test notifications to make orange! Create one first.');
-            return;
-        }
-
-        // Find the first active notification and make it inactive
-        const activeNotification = testNotifications.find(n => n.status === 'active');
-        if (!activeNotification) {
-            toast.error('No active notifications to make orange!');
-            return;
-        }
-
-        setTestNotifications(prev =>
-            prev.map(notification =>
-                notification.id === activeNotification.id
-                    ? {
-                        ...notification,
-                        status: 'inactive' as const,
-                        currentPosition: Math.floor(Math.random() * 10) + 6 // Position 6-15 (inactive)
-                    }
-                    : notification
-            )
-        );
-
-        toast.success(`Made notification orange: ${activeNotification.mapName} (Position #${Math.floor(Math.random() * 10) + 6})`);
-    };
-
-    const handleClearTestNotifications = () => {
-        setTestNotifications([]);
-        toast.success('Cleared all test notifications');
-    };
 
     const handleCancelDelete = () => {
         setShowDeleteModal(false);
@@ -231,8 +183,20 @@ const MapperAlerts: React.FC = () => {
 
     const handleConfirmAddAlert = async () => {
         try {
-            await apiClient.post('/api/v1/users/alerts', {});
-            toast.success('Alert created successfully!');
+            // Get map count from user's maps (this would come from the map search API)
+            const mapCount = alerts.length; // This is a placeholder - in reality, we'd get this from the API
+
+            const response = await apiClient.post('/api/v1/users/alerts', {
+                MapCount: mapCount,
+                alert_type: 'accurate' // Default to accurate, will be auto-switched if needed
+            });
+
+            if (response.data.auto_switched) {
+                toast.warning('Due to the large number of maps, your alert has been set to "Inaccurate" mode. You will only see notifications when new players drive your maps, not when existing players improve their times.');
+            } else {
+                toast.success('Alert created successfully!');
+            }
+
             setShowAddAlertModal(false);
             fetchAlerts();
         } catch (error: any) {
@@ -290,16 +254,6 @@ const MapperAlerts: React.FC = () => {
                             <Settings className="w-4 h-4" />
                             Manage Alerts
                         </button>
-                        <button
-                            onClick={() => setActiveTab('test')}
-                            className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 flex items-center gap-2 ${activeTab === 'test'
-                                ? 'bg-gradient-to-r from-primary to-primary-glow text-white shadow-glow'
-                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                }`}
-                        >
-                            <Bell className="w-4 h-4" />
-                            Test Section
-                        </button>
                     </div>
                 </div>
 
@@ -314,8 +268,9 @@ const MapperAlerts: React.FC = () => {
                             </h2>
                             <div className="space-y-4">
                                 <p className="text-muted-foreground">
-                                    When you add an alert, it gets triggered once per day. It will fetch your username from trackmania exchange and go through all of your created maps and fetch new times driven in the past 24 hours. If any new times are found, you will get a notification email. If you want to stop the notifications, you can click on manage alerts and remove the alert.
+                                    When you add an alert, it gets triggered once per day. It will fetch your username from trackmania exchange and go through all of your created maps and fetch new times driven in the past 24 hours. If any new times are found, you will get a notification email.
                                 </p>
+
                                 <div className="bg-muted/50 p-4 rounded-xl">
                                     <h3 className="font-semibold mb-2">How it works:</h3>
                                     <ul className="text-sm text-muted-foreground space-y-1">
@@ -364,6 +319,88 @@ const MapperAlerts: React.FC = () => {
                             </div>
                         )}
 
+                        {/* Notification History - Only show if user has alerts */}
+                        {alerts.length > 0 && (
+                            <div className="racing-card">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                                        <Clock className="w-5 h-5" />
+                                        Notification History (Last 5 Days)
+                                    </h2>
+                                    <button
+                                        onClick={fetchNotificationHistory}
+                                        disabled={historyLoading}
+                                        className="btn-racing text-sm"
+                                    >
+                                        {historyLoading ? 'Loading...' : 'Refresh'}
+                                    </button>
+                                </div>
+
+                                {historyLoading ? (
+                                    <div className="flex justify-center py-8">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {notificationHistory.map((day, index) => (
+                                            <div key={day.date} className="border border-border rounded-lg p-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <h3 className="font-medium text-foreground">
+                                                        {new Date(day.date).toLocaleDateString('en-US', {
+                                                            weekday: 'long',
+                                                            year: 'numeric',
+                                                            month: 'long',
+                                                            day: 'numeric'
+                                                        })}
+                                                    </h3>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {index === 0 ? 'Today' : index === 1 ? 'Yesterday' : `${index} days ago`}
+                                                    </span>
+                                                </div>
+
+                                                <div className="space-y-4">
+                                                    {/* Mapper Alerts */}
+                                                    <div className="space-y-2">
+                                                        <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                                                            <Bell className="w-4 h-4" />
+                                                            Mapper Alerts
+                                                        </h4>
+                                                        {day.mapper_alert ? (
+                                                            <div className={`p-3 rounded-lg text-sm ${day.mapper_alert.status === 'sent'
+                                                                ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800'
+                                                                : day.mapper_alert.status === 'technical_error'
+                                                                    ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
+                                                                    : 'bg-gray-50 dark:bg-gray-950/20 border border-gray-200 dark:border-gray-800'
+                                                                }`}>
+                                                                <p className={`font-medium ${day.mapper_alert.status === 'sent'
+                                                                    ? 'text-green-800 dark:text-green-200'
+                                                                    : day.mapper_alert.status === 'technical_error'
+                                                                        ? 'text-red-800 dark:text-red-200'
+                                                                        : 'text-gray-800 dark:text-gray-200'
+                                                                    }`}>
+                                                                    {day.mapper_alert.message}
+                                                                </p>
+                                                                {day.mapper_alert.records_found > 0 && (
+                                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                                        {day.mapper_alert.records_found} records found
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-xs text-muted-foreground italic">
+                                                                No processing data
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Add Alert Form */}
                         {showAddForm && (
                             <div className="racing-card mb-8">
@@ -409,8 +446,11 @@ const MapperAlerts: React.FC = () => {
                                 <div className="racing-card text-center py-12">
                                     <Bell className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                                     <h3 className="text-xl font-semibold mb-2">No alerts yet</h3>
-                                    <p className="text-muted-foreground mb-6">
+                                    <p className="text-muted-foreground mb-4">
                                         Add your first map alert to get notifications when someone drives your maps
+                                    </p>
+                                    <p className="text-sm text-muted-foreground mb-6">
+                                        Once you add an alert, you'll see your notification history here showing when alerts were processed and if any new records were found.
                                     </p>
                                     <button
                                         onClick={handleAddAlertClick}
@@ -554,145 +594,6 @@ const MapperAlerts: React.FC = () => {
                     </div>
                 )}
 
-                {/* Test Section Tab */}
-                {activeTab === 'test' && (
-                    <div className="space-y-6">
-                        <div className="bg-card rounded-xl border border-border p-6">
-                            <h2 className="text-xl font-semibold mb-4">API Gateway Test Section</h2>
-                            <p className="text-muted-foreground mb-6">
-                                This section tests the simple test endpoint to isolate API Gateway issues.
-                            </p>
-
-                            <div className="space-y-4">
-                                <div className="flex gap-4">
-                                    <button
-                                        onClick={handleTestEndpoint}
-                                        disabled={testLoading}
-                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-primary-glow text-white rounded-xl font-medium hover:shadow-glow transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {testLoading ? 'Testing...' : 'Test Simple Endpoint'}
-                                    </button>
-                                    <button
-                                        onClick={handleTestAdvancedEndpoint}
-                                        disabled={testLoading}
-                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {testLoading ? 'Testing...' : 'Test Advanced Endpoint'}
-                                    </button>
-                                </div>
-
-                                {testResult && (
-                                    <div className="mt-4 p-4 rounded-xl border border-border bg-muted/50">
-                                        <h3 className="font-medium mb-2">Test Result:</h3>
-                                        <pre className="text-sm whitespace-pre-wrap break-words">
-                                            {testResult}
-                                        </pre>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Driver Notification Test Section */}
-                        <div className="bg-card rounded-xl border border-border p-6">
-                            <h2 className="text-xl font-semibold mb-4">Driver Notification Visual Test</h2>
-                            <p className="text-muted-foreground mb-6">
-                                Test the visual appearance of driver notifications without affecting the database.
-                                These notifications are temporary and will disappear when you refresh the page.
-                            </p>
-
-                            <div className="space-y-4">
-                                <div className="flex gap-4 flex-wrap">
-                                    <button
-                                        onClick={handleCreateTestNotification}
-                                        className="px-6 py-3 bg-gradient-to-r from-primary to-primary-glow text-white rounded-xl font-medium hover:shadow-glow transition-all duration-300"
-                                    >
-                                        Create Test Notification
-                                    </button>
-                                    <button
-                                        onClick={handleMakeNotificationOrange}
-                                        className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-300"
-                                    >
-                                        Make Notification Orange
-                                    </button>
-                                    <button
-                                        onClick={handleClearTestNotifications}
-                                        className="px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-medium hover:shadow-lg transition-all duration-300"
-                                    >
-                                        Clear All Test Notifications
-                                    </button>
-                                </div>
-
-                                {/* Test Notifications Display */}
-                                {testNotifications.length > 0 && (
-                                    <div className="mt-6">
-                                        <h3 className="font-medium mb-4">Test Notifications ({testNotifications.length})</h3>
-                                        <div className="space-y-3">
-                                            {testNotifications.map((notification) => {
-                                                const isInactive = notification.status === 'inactive';
-
-                                                return (
-                                                    <div key={notification.id} className={`racing-card ${isInactive ? 'border-orange-500/50 bg-orange-50/10' : ''}`}>
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-4 flex-1">
-                                                                <div className={`p-3 rounded-xl ${isInactive
-                                                                    ? 'bg-gradient-to-br from-orange-500 to-orange-600 shadow-orange-500/20'
-                                                                    : 'bg-gradient-to-br from-primary to-primary-glow shadow-glow'
-                                                                    }`}>
-                                                                    {isInactive ? (
-                                                                        <Bell className="w-5 h-5 text-white" />
-                                                                    ) : (
-                                                                        <Bell className="w-5 h-5 text-white" />
-                                                                    )}
-                                                                </div>
-
-                                                                <div className="flex-1">
-                                                                    <h3 className={`font-semibold mb-1 ${isInactive ? 'text-orange-600' : 'text-foreground'}`}>
-                                                                        {notification.mapName}
-                                                                    </h3>
-
-                                                                    <div className="flex items-center gap-6 text-sm text-muted-foreground mb-2">
-                                                                        <span>Map UID: {notification.mapUid}</span>
-                                                                        <span>Created: {new Date(notification.createdAt).toLocaleString()}</span>
-                                                                    </div>
-
-                                                                    <div className="flex items-center gap-4 text-sm">
-                                                                        {isInactive ? (
-                                                                            <span className="text-orange-600 font-medium">
-                                                                                Status: <strong>Inactive - No longer in top 5</strong>
-                                                                            </span>
-                                                                        ) : (
-                                                                            <div className="flex flex-col gap-1">
-                                                                                <span className="text-foreground">
-                                                                                    Current Position: <strong>#{notification.currentPosition}</strong>
-                                                                                </span>
-                                                                                <span className="text-muted-foreground text-xs">
-                                                                                    Status: <strong>Active</strong>
-                                                                                </span>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="flex items-center gap-4">
-                                                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${isInactive
-                                                                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
-                                                                    : 'bg-gradient-to-r from-primary to-primary-glow text-white'
-                                                                    }`}>
-                                                                    {isInactive ? 'Inactive' : `Position #${notification.currentPosition}`}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );

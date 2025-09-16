@@ -52,6 +52,10 @@ const DriverPage: React.FC = () => {
     const [isAddingNotification, setIsAddingNotification] = useState(false);
     const [showSuccessDialog, setShowSuccessDialog] = useState(false);
     const [showErrorDialog, setShowErrorDialog] = useState(false);
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage] = useState(10);
     const [dialogMessage, setDialogMessage] = useState('');
     const [activeTab, setActiveTab] = useState<'notifications' | 'info'>('notifications');
     const [showTmUsernameModal, setShowTmUsernameModal] = useState(false);
@@ -215,6 +219,21 @@ const DriverPage: React.FC = () => {
         } catch (error) {
             toast.error('Failed to delete notification');
         }
+    };
+
+    // Pagination functions
+    const getTotalPages = () => {
+        return Math.ceil(notifications.length / itemsPerPage);
+    };
+
+    const getCurrentPageNotifications = () => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return notifications.slice(startIndex, endIndex);
+    };
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page);
     };
 
     const formatTime = (milliseconds: number): string => {
@@ -401,75 +420,120 @@ const DriverPage: React.FC = () => {
                                 </button>
                             </div>
                         ) : notifications.length > 0 ? (
-                            notifications.map((notification) => {
-                                const isInactive = notification.status === 'inactive';
+                            <>
+                                {getCurrentPageNotifications().map((notification) => {
+                                    const isInactive = notification.status === 'inactive';
 
-                                return (
-                                    <div key={notification.id} className={`racing-card ${isInactive ? 'border-orange-500/50 bg-orange-50/10' : ''}`}>
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-4 flex-1">
-                                                <div className={`p-3 rounded-xl ${isInactive
-                                                    ? 'bg-gradient-to-br from-orange-500 to-orange-600 shadow-orange-500/20'
-                                                    : 'bg-gradient-to-br from-primary to-primary-glow shadow-glow'
-                                                    }`}>
-                                                    {isInactive ? (
-                                                        <Target className="w-5 h-5 text-white" />
-                                                    ) : (
-                                                        <Trophy className="w-5 h-5 text-white" />
-                                                    )}
-                                                </div>
-
-                                                <div className="flex-1">
-                                                    <h3 className={`font-semibold mb-1 ${isInactive ? 'text-orange-600' : 'text-foreground'}`}>
-                                                        {notification.mapName}
-                                                    </h3>
-
-                                                    <div className="flex items-center gap-6 text-sm text-muted-foreground mb-2">
-                                                        <span>Map UID: {notification.mapUid}</span>
-                                                        <span>Created: {new Date(notification.createdAt).toLocaleDateString()}</span>
-                                                        {notification.lastChecked && (
-                                                            <span>Last checked: {new Date(notification.lastChecked).toLocaleDateString()}</span>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex items-center gap-4 text-sm">
+                                    return (
+                                        <div key={notification.id} className={`racing-card ${isInactive ? 'border-orange-500/50 bg-orange-50/10' : ''}`}>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-4 flex-1">
+                                                    <div className={`p-3 rounded-xl ${isInactive
+                                                        ? 'bg-gradient-to-br from-orange-500 to-orange-600 shadow-orange-500/20'
+                                                        : 'bg-gradient-to-br from-primary to-primary-glow shadow-glow'
+                                                        }`}>
                                                         {isInactive ? (
-                                                            <span className="text-orange-600 font-medium">
-                                                                Status: <strong>Inactive - No longer in top 5</strong>
-                                                            </span>
+                                                            <Target className="w-5 h-5 text-white" />
                                                         ) : (
-                                                            <div className="flex flex-col gap-1">
-                                                                <span className="text-foreground">
-                                                                    Current Position: <strong>#{notification.currentPosition}</strong>
-                                                                </span>
-                                                                <span className="text-muted-foreground text-xs">
-                                                                    Personal Best: <strong>{notification.personalBestFormatted}</strong>
-                                                                </span>
-                                                            </div>
+                                                            <Trophy className="w-5 h-5 text-white" />
                                                         )}
                                                     </div>
-                                                </div>
-                                            </div>
 
-                                            <div className="flex items-center gap-4">
-                                                <div className={`px-3 py-1 rounded-full text-xs font-medium ${isInactive
-                                                    ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
-                                                    : 'bg-gradient-to-r from-primary to-primary-glow text-white'
-                                                    }`}>
-                                                    {isInactive ? 'Inactive' : `Position #${notification.currentPosition}`}
+                                                    <div className="flex-1">
+                                                        <h3 className={`font-semibold mb-1 ${isInactive ? 'text-orange-600' : 'text-foreground'}`}>
+                                                            {notification.mapName}
+                                                        </h3>
+
+                                                        <div className="flex items-center gap-6 text-sm text-muted-foreground mb-2">
+                                                            <span>Map UID: {notification.mapUid}</span>
+                                                            <span>Created: {new Date(notification.createdAt).toLocaleDateString()}</span>
+                                                            {notification.lastChecked && (
+                                                                <span>Last checked: {new Date(notification.lastChecked).toLocaleDateString()}</span>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="flex items-center gap-4 text-sm">
+                                                            {isInactive ? (
+                                                                <span className="text-orange-600 font-medium">
+                                                                    Status: <strong>Inactive - No longer in top 5</strong>
+                                                                </span>
+                                                            ) : (
+                                                                <div className="flex flex-col gap-1">
+                                                                    <span className="text-foreground">
+                                                                        Current Position: <strong>#{notification.currentPosition}</strong>
+                                                                    </span>
+                                                                    <span className="text-muted-foreground text-xs">
+                                                                        Personal Best: <strong>{notification.personalBestFormatted}</strong>
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 </div>
 
-                                                <button
-                                                    onClick={() => handleDeleteNotification(notification.id)}
-                                                    className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all duration-300"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${isInactive
+                                                        ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
+                                                        : 'bg-gradient-to-r from-primary to-primary-glow text-white'
+                                                        }`}>
+                                                        {isInactive ? 'Inactive' : `Position #${notification.currentPosition}`}
+                                                    </div>
+
+                                                    <button
+                                                        onClick={() => handleDeleteNotification(notification.id)}
+                                                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all duration-300"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
+                                    );
+                                })}
+
+                                {/* Pagination Controls */}
+                                {notifications.length > itemsPerPage && (
+                                    <div className="flex justify-center items-center gap-2 mt-6">
+                                        <button
+                                            onClick={() => handlePageChange(currentPage - 1)}
+                                            disabled={currentPage === 1}
+                                            className="px-3 py-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                        >
+                                            Previous
+                                        </button>
+
+                                        <div className="flex gap-1">
+                                            {Array.from({ length: getTotalPages() }, (_, i) => i + 1).map((page) => (
+                                                <button
+                                                    key={page}
+                                                    onClick={() => handlePageChange(page)}
+                                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${page === currentPage
+                                                            ? 'bg-primary text-white'
+                                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                                        }`}
+                                                >
+                                                    {page}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <button
+                                            onClick={() => handlePageChange(currentPage + 1)}
+                                            disabled={currentPage === getTotalPages()}
+                                            className="px-3 py-2 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                        >
+                                            Next
+                                        </button>
                                     </div>
-                                );
-                            })
+                                )}
+
+                                {/* Pagination Info */}
+                                {notifications.length > itemsPerPage && (
+                                    <div className="text-center text-sm text-muted-foreground mt-2">
+                                        Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, notifications.length)} of {notifications.length} notifications
+                                    </div>
+                                )}
+                            </>
                         ) : null}
                     </div>
                 )}

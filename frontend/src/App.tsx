@@ -2,6 +2,7 @@ import React, { useState, useEffect, ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import Sidebar from './components/Layout/sidebar';
+import { isAdmin } from './auth';
 
 // Import all pages
 import Landing from './pages/Landing';
@@ -10,6 +11,7 @@ import MapperNews from './pages/MapperNews';
 import DriverPage from './pages/DriverPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Admin from './pages/Admin';
 
 const App: React.FC = () => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -26,6 +28,12 @@ const App: React.FC = () => {
 
     const PrivateRoute = ({ children }: { children: ReactNode }) => {
         return isLoggedIn ? children : <Navigate to="/login" />;
+    };
+
+    const AdminRoute = ({ children }: { children: ReactNode }) => {
+        if (!isLoggedIn) return <Navigate to="/login" />;
+        if (!isAdmin()) return <Navigate to="/" />;
+        return children;
     };
 
     return (
@@ -50,9 +58,9 @@ const App: React.FC = () => {
                             <Route
                                 path="/MapperNews"
                                 element={
-                                    <PrivateRoute>
+                                    <AdminRoute>
                                         <MapperNews />
-                                    </PrivateRoute>
+                                    </AdminRoute>
                                 }
                             />
                             <Route
@@ -61,6 +69,14 @@ const App: React.FC = () => {
                                     <PrivateRoute>
                                         <DriverPage />
                                     </PrivateRoute>
+                                }
+                            />
+                            <Route
+                                path="/Admin"
+                                element={
+                                    <AdminRoute>
+                                        <Admin />
+                                    </AdminRoute>
                                 }
                             />
                         </Routes>

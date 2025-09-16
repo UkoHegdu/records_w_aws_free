@@ -73,3 +73,6 @@ parameters.json
 response.json
 response2.json
 *.json.bak
+
+# Documentation files (may contain sensitive info)
+CHANGELOG.md

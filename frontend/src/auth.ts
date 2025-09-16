@@ -75,4 +75,23 @@ apiClient.interceptors.response.use(
     }
 );
 
+// Utility function to get user role from token
+export const getUserRole = (): string | null => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return null;
+
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.role || 'user';
+    } catch (error) {
+        console.error('Error parsing token:', error);
+        return null;
+    }
+};
+
+// Utility function to check if user is admin
+export const isAdmin = (): boolean => {
+    return getUserRole() === 'admin';
+};
+
 export default apiClient;
