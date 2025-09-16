@@ -127,7 +127,8 @@ exports.handler = async (event, context) => {
         const accessToken = jwt.sign(
             {
                 user_id: userId,
-                session_id: sessionId
+                session_id: sessionId,
+                role: user.rows[0].role || 'user'
             },
             process.env.JWT_SECRET,
             { expiresIn: '15m' }
@@ -147,6 +148,7 @@ exports.handler = async (event, context) => {
         const sessionData = {
             session_id: sessionId,
             user_id: userId,
+            role: user.rows[0].role || 'user',
             access_token: accessToken,
             refresh_token: refreshToken,
             created_at: now.toISOString(),

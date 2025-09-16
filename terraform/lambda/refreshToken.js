@@ -94,7 +94,8 @@ exports.handler = async (event, context) => {
         const newAccessToken = jwt.sign(
             {
                 user_id: session.user_id,
-                session_id: session.session_id
+                session_id: session.session_id,
+                role: session.role || 'user'
             },
             process.env.JWT_SECRET,
             { expiresIn: '15m' }

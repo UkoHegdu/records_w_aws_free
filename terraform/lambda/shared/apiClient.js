@@ -71,6 +71,7 @@ const refreshToken = async (refreshTokenValue) => {
             'https://prod.trackmania.core.nadeo.online/v2/authentication/token/refresh',
             {},
             {
+                timeout: 30000, // 30 second timeout
                 headers: {
                     Authorization: `nadeo_v1 t=${refreshTokenValue}`,
                     'Content-Type': 'application/json',
@@ -102,6 +103,7 @@ const performLogin = async () => {
         const response = await axios.post(process.env.AUTH_API_URL,
             { audience: 'NadeoLiveServices' },
             {
+                timeout: 30000, // 30 second timeout
                 headers: {
                     'Authorization': `Basic ${credentials}`,
                     'Content-Type': 'application/json',
@@ -184,6 +186,7 @@ const apiClient = {
 
                 const response = await axios({
                     ...config,
+                    timeout: 30000, // 30 second timeout
                     headers: {
                         'Authorization': `nadeo_v1 t=${accessToken}`,
                         'Content-Type': 'application/json',

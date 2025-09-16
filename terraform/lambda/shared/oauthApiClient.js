@@ -76,6 +76,7 @@ const refreshOAuth2Token = async (refreshTokenValue) => {
                 client_secret: process.env.OCLIENT_SECRET
             },
             {
+                timeout: 30000, // 30 second timeout
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 }
@@ -109,6 +110,7 @@ const performOAuth2Login = async () => {
                 client_secret: process.env.OCLIENT_SECRET
             },
             {
+                timeout: 30000, // 30 second timeout
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 }
@@ -192,6 +194,7 @@ const oauthApiClient = {
 
                 const response = await axios({
                     ...config,
+                    timeout: 30000, // 30 second timeout
                     headers: {
                         'Authorization': `Bearer ${accessToken}`,
                         'Content-Type': 'application/json',

@@ -1,8 +1,9 @@
-// lambda/testDriverNotifications.js - Test script for driver notifications
+// lambda/testDriverNotifications.js - Test script for driver notifications with position API
 const { Client } = require('pg');
 const jwt = require('jsonwebtoken');
 const apiClient = require('./shared/apiClient');
 const { formatTime } = require('./shared/timeFormatter');
+const { checkDriverPositions } = require('./checkDriverPositions');
 
 // Database connection using Neon
 const getDbConnection = () => {
@@ -296,6 +297,9 @@ exports.handler = async (event, context) => {
         // Test email composition
         await testEmailComposition();
 
+        // Test position API functionality
+        await testPositionAPI();
+
         console.log('\n✅ All tests completed successfully!');
 
         return {
@@ -320,12 +324,68 @@ exports.handler = async (event, context) => {
     }
 };
 
+// Test position API functionality
+async function testPositionAPI() {
+    console.log('\n🚀 Testing Position API Functionality...');
+
+    try {
+        const client = getDbConnection();
+        await client.connect();
+
+        // Create test driver notifications
+        const testNotifications = [
+            {
+                id: 1,
+                user_id: 1,
+                map_uid: 'test_map_1',
+                tm_username: 'test_driver',
+                tm_account_id: 'test_account_1',
+                current_position: 5,
+                current_score: 50000
+            },
+            {
+                id: 2,
+                user_id: 1,
+                map_uid: 'test_map_2',
+                tm_username: 'test_driver',
+                tm_account_id: 'test_account_1',
+                current_position: 3,
+                current_score: 48000
+            }
+        ];
+
+        console.log(`📊 Testing with ${testNotifications.length} notifications`);
+
+        // Test position checking
+        const results = await checkDriverPositions(testNotifications);
+
+        console.log(`📈 Position API returned ${results.length} results`);
+
+        results.forEach((result, index) => {
+            console.log(`\n🎯 Result ${index + 1}:`);
+            console.log(`   Map: ${result.map_uid}`);
+            console.log(`   User: ${result.tm_username}`);
+            console.log(`   Position: ${result.old_position} → ${result.new_position}`);
+            console.log(`   Score: ${result.old_score} → ${result.new_score}`);
+            console.log(`   Improved: ${result.improved}`);
+        });
+
+        await client.end();
+        console.log('✅ Position API test completed');
+
+    } catch (error) {
+        console.error('❌ Error in position API test:', error);
+    }
+}
+
 // Export functions for individual testing
 module.exports = {
     testDriverNotificationProcessor,
     testEmailComposition,
     createTestNotification,
     simulatePositionChange,
-    cleanupTestNotification
+    cleanupTestNotification,
+    testPositionAPI
 };
+
 

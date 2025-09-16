@@ -288,6 +288,29 @@ resource "aws_dynamodb_table" "map_search_results" {
   }
 }
 
+# DynamoDB table for caching map leaderboard data during daily processing
+resource "aws_dynamodb_table" "map_leaderboard_cache" {
+  name           = "${var.app_name}-map-leaderboard-cache"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "cache_key"
+
+  attribute {
+    name = "cache_key"
+    type = "S"
+  }
+
+  # TTL for automatic cleanup after daily job (24 hours)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "${var.app_name}-map-leaderboard-cache"
+    Environment = var.environment
+  }
+}
+
 # SQS Queue for Map Search Jobs (Free Tier: 1 million requests/month)
 resource "aws_sqs_queue" "map_search_queue" {
   name                      = "${var.app_name}-map-search-queue"
@@ -599,6 +622,8 @@ resource "aws_iam_role_policy" "lambda_dynamodb_policy" {
           "${aws_dynamodb_table.map_search_results.arn}/index/*",
           aws_dynamodb_table.user_sessions.arn,
           "${aws_dynamodb_table.user_sessions.arn}/index/*",
+          aws_dynamodb_table.map_leaderboard_cache.arn,
+          "${aws_dynamodb_table.map_leaderboard_cache.arn}/index/*",
           aws_dynamodb_table.driver_notification_jobs.arn,
           "${aws_dynamodb_table.driver_notification_jobs.arn}/index/*",
           aws_dynamodb_table.daily_emails.arn,
@@ -926,19 +951,22 @@ resource "aws_lambda_function" "schedulerProcessor" {
   handler         = "lambda/schedulerProcessor.handler"
   runtime         = "nodejs18.x"
   timeout         = 900  # 15 minutes
-  reserved_concurrent_executions = 3  # Allow 3 concurrent user checks
+  reserved_concurrent_executions = 1  # Sequential processing to respect API rate limits
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
   environment {
     variables = {
       DAILY_EMAILS_TABLE_NAME = aws_dynamodb_table.daily_emails.name
       DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
+      MAP_LEADERBOARD_CACHE_TABLE_NAME = aws_dynamodb_table.map_leaderboard_cache.name
       LEAD_API = data.aws_ssm_parameter.lead_api.value
       AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
       AUTHORIZATION = data.aws_ssm_parameter.authorization.value
       USER_AGENT = data.aws_ssm_parameter.user_agent.value
       OCLIENT_ID = data.aws_ssm_parameter.oclient_id.value
       OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
+      MAX_NEW_RECORDS_PER_MAP = "20"
+      POPULAR_MAP_MESSAGE = "This map has had more than 20 new times and we are not showing all the details to prevent email spam."
     }
   }
 
@@ -1162,6 +1190,200 @@ resource "aws_lambda_function" "email_sender" {
     variables = {
       DAILY_EMAILS_TABLE_NAME = aws_dynamodb_table.daily_emails.name
       SES_FROM_EMAIL = data.aws_ssm_parameter.email_user.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Lambda function for efficient driver position checking
+resource "aws_lambda_function" "check_driver_positions" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-check-driver-positions"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/checkDriverPositions.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 60  # 1 minute for position API calls
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
+      LEAD_API = data.aws_ssm_parameter.lead_api.value
+      AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
+      AUTHORIZATION = data.aws_ssm_parameter.authorization.value
+      USER_AGENT = data.aws_ssm_parameter.user_agent.value
+      OCLIENT_ID = data.aws_ssm_parameter.oclient_id.value
+      OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Lambda function for getting admin configuration
+resource "aws_lambda_function" "get_admin_config" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-get-admin-config"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/getAdminConfig.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Lambda function for updating admin configuration
+resource "aws_lambda_function" "update_admin_config" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-update-admin-config"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/updateAdminConfig.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Lambda function for checking map positions
+resource "aws_lambda_function" "check_map_positions" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-check-map-positions"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/checkMapPositions.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 60  # 1 minute for position API calls
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
+      LEAD_API = data.aws_ssm_parameter.lead_api.value
+      AUTH_API_URL = data.aws_ssm_parameter.auth_api_url.value
+      AUTHORIZATION = data.aws_ssm_parameter.authorization.value
+      USER_AGENT = data.aws_ssm_parameter.user_agent.value
+      OCLIENT_ID = data.aws_ssm_parameter.oclient_id.value
+      OCLIENT_SECRET = data.aws_ssm_parameter.oclient_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Lambda function for getting admin users
+resource "aws_lambda_function" "get_admin_users" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-get-admin-users"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/getAdminUsers.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Lambda function for updating user alert type
+resource "aws_lambda_function" "update_user_alert_type" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-update-user-alert-type"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/updateUserAlertType.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Lambda function for getting notification history
+resource "aws_lambda_function" "get_notification_history" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-get-notification-history"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/getNotificationHistory.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+# Lambda function for getting admin daily overview
+resource "aws_lambda_function" "get_admin_daily_overview" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-get-admin-daily-overview"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/getAdminDailyOverview.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
     }
   }
 
@@ -1636,14 +1858,30 @@ resource "aws_api_gateway_deployment" "api_deployment" {
     aws_api_gateway_integration.user_tm_username_options_integration,
     aws_api_gateway_method_response.user_tm_username_options_200,
     aws_api_gateway_integration_response.user_tm_username_options_integration_response,
+    # Admin configuration endpoints
+    aws_api_gateway_method.admin_config_get,
+    aws_api_gateway_integration.admin_config_get_integration,
+    aws_api_gateway_method.admin_config_put,
+    aws_api_gateway_integration.admin_config_put_integration,
+    # Admin users endpoints
+    aws_api_gateway_method.admin_users_get,
+    aws_api_gateway_integration.admin_users_get_integration,
+    aws_api_gateway_method.admin_users_alert_type_put,
+    aws_api_gateway_integration.admin_users_alert_type_put_integration,
+    # Notification history endpoints
+    aws_api_gateway_method.notification_history_get,
+    aws_api_gateway_integration.notification_history_get_integration,
+    # Admin daily overview endpoints
+    aws_api_gateway_method.admin_daily_overview_get,
+    aws_api_gateway_integration.admin_daily_overview_get_integration,
   ]
 
   rest_api_id = aws_api_gateway_rest_api.api.id
   
-  # Force new deployment to pick up driver notification endpoints
+  # Force new deployment to pick up driver notification and admin config endpoints
   triggers = {
     redeployment = sha1(jsonencode([
-      "driver-endpoints-fixed-path-2025-01-11",
+      "admin-config-endpoints-2025-01-11",
       "lambda-lifecycle-fix-${timestamp()}",
       aws_api_gateway_method.maps_options.id,
       aws_api_gateway_integration.maps_options_integration.id,
@@ -1729,6 +1967,22 @@ resource "aws_api_gateway_deployment" "api_deployment" {
       aws_api_gateway_integration.user_tm_username_options_integration.id,
       aws_api_gateway_method_response.user_tm_username_options_200.id,
       aws_api_gateway_integration_response.user_tm_username_options_integration_response.id,
+      # Admin configuration endpoints
+      aws_api_gateway_method.admin_config_get.id,
+      aws_api_gateway_integration.admin_config_get_integration.id,
+      aws_api_gateway_method.admin_config_put.id,
+      aws_api_gateway_integration.admin_config_put_integration.id,
+      # Admin users endpoints
+      aws_api_gateway_method.admin_users_get.id,
+      aws_api_gateway_integration.admin_users_get_integration.id,
+      aws_api_gateway_method.admin_users_alert_type_put.id,
+      aws_api_gateway_integration.admin_users_alert_type_put_integration.id,
+      # Notification history endpoints
+      aws_api_gateway_method.notification_history_get.id,
+      aws_api_gateway_integration.notification_history_get_integration.id,
+      # Admin daily overview endpoints
+      aws_api_gateway_method.admin_daily_overview_get.id,
+      aws_api_gateway_integration.admin_daily_overview_get_integration.id,
       aws_api_gateway_method.test_get.id,
       aws_api_gateway_integration.test_get_integration.id,
       aws_api_gateway_method.test_post.id,

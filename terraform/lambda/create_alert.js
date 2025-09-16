@@ -204,18 +204,48 @@ async function handleCreateAlert(event, headers) {
         const { username, email } = userResult.rows[0];
         console.log(`Creating alert for user: ${username} (${email})`);
 
-        // Insert alert with actual user_id from JWT token
-        await client.query(
-            'INSERT INTO alerts (username, email, user_id, created_at) VALUES ($1, $2, $3, NOW())',
-            [username, email, userId]
+        // Get map count from request body
+        const mapCount = body.MapCount || 0;
+        const alertType = body.alert_type || 'accurate';
+
+        console.log(`📊 Map count: ${mapCount}, Alert type: ${alertType}`);
+
+        // Check if user exceeds map limit for accurate mode
+        const maxMapsLimit = parseInt(process.env.MAX_MAPS_PER_USER || '200');
+        let finalAlertType = alertType;
+
+        if (alertType === 'accurate' && mapCount > maxMapsLimit) {
+            console.log(`⚠️ User ${username} has ${mapCount} maps, exceeding limit of ${maxMapsLimit}. Switching to inaccurate mode.`);
+            finalAlertType = 'inaccurate';
+        }
+
+        // Insert alert with actual user_id from JWT token, alert type, and map count
+        const alertResult = await client.query(
+            'INSERT INTO alerts (username, email, user_id, alert_type, map_count, created_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id',
+            [username, email, userId, finalAlertType, mapCount]
         );
 
-        console.log(`✅ Alert created successfully for user ${userId}`);
+        const alertId = alertResult.rows[0].id;
+        console.log(`✅ Alert created successfully for user ${userId} with ID ${alertId}`);
+
+        // If inaccurate mode, initialize position data for all maps
+        if (finalAlertType === 'inaccurate' && mapCount > 0) {
+            console.log(`🚀 Initializing position data for ${mapCount} maps in inaccurate mode`);
+            // Note: Position initialization will be handled by the mapSearchBackground process
+            // when it processes the alert maps
+        }
 
         return {
             statusCode: 200,
             headers: headers,
-            body: JSON.stringify({ success: true, msg: 'Alert created successfully' })
+            body: JSON.stringify({
+                success: true,
+                msg: 'Alert created successfully',
+                alert_id: alertId,
+                alert_type: finalAlertType,
+                map_count: mapCount,
+                auto_switched: alertType !== finalAlertType
+            })
         };
 
     } catch (err) {

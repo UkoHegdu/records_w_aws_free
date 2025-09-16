@@ -33,9 +33,10 @@ const queueUserChecks = async () => {
             return;
         }
 
-        // Queue each user check as a separate job
+        // Phase 1: Queue map alert checks for all users
+        console.log('📋 Phase 1: Queuing map alert checks...');
         for (const { username, email } of alerts) {
-            console.log(`📤 Queuing check for ${username}...`);
+            console.log(`📤 Queuing map alert check for ${username}...`);
 
             try {
                 await sqsClient.send(new SendMessageCommand({
@@ -43,7 +44,8 @@ const queueUserChecks = async () => {
                     MessageBody: JSON.stringify({
                         username: username,
                         email: email,
-                        type: 'scheduled_check',
+                        type: 'map_alert_check',
+                        phase: 1,
                         timestamp: Date.now()
                     }),
                     MessageAttributes: {
@@ -53,15 +55,58 @@ const queueUserChecks = async () => {
                         },
                         type: {
                             DataType: 'String',
-                            StringValue: 'scheduled_check'
+                            StringValue: 'map_alert_check'
+                        },
+                        phase: {
+                            DataType: 'String',
+                            StringValue: '1'
                         }
                     }
                 }));
 
                 usersQueued++;
-                console.log(`✅ Queued check for ${username}`);
+                console.log(`✅ Queued map alert check for ${username}`);
             } catch (error) {
-                console.error(`❌ Error queuing ${username}:`, error.message);
+                console.error(`❌ Error queuing map alert check for ${username}:`, error.message);
+                // Continue with other users even if one fails
+            }
+        }
+
+        // Phase 2: Queue driver notification checks for all users
+        console.log('📋 Phase 2: Queuing driver notification checks...');
+        for (const { username, email } of alerts) {
+            console.log(`📤 Queuing driver notification check for ${username}...`);
+
+            try {
+                await sqsClient.send(new SendMessageCommand({
+                    QueueUrl: process.env.SCHEDULER_QUEUE_URL,
+                    MessageBody: JSON.stringify({
+                        username: username,
+                        email: email,
+                        type: 'driver_notification_check',
+                        phase: 2,
+                        timestamp: Date.now()
+                    }),
+                    MessageAttributes: {
+                        username: {
+                            DataType: 'String',
+                            StringValue: username
+                        },
+                        type: {
+                            DataType: 'String',
+                            StringValue: 'driver_notification_check'
+                        },
+                        phase: {
+                            DataType: 'String',
+                            StringValue: '2'
+                        }
+                    }
+                }));
+
+                usersQueued++;
+                console.log(`✅ Queued driver notification check for ${username}`);
+            } catch (error) {
+                console.error(`❌ Error queuing driver notification check for ${username}:`, error.message);
                 // Continue with other users even if one fails
             }
         }

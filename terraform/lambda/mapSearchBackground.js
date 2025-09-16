@@ -202,6 +202,109 @@ const updateJobStatus = async (jobId, status, result = null, error = null) => {
     await dynamoClient.send(new UpdateItemCommand(updateParams));
 };
 
+// Check and initialize position data for inaccurate mode users
+const checkAndInitializePositions = async (username) => {
+    try {
+        const { Client } = require('pg');
+
+        // Database connection
+        const getDbConnection = () => {
+            const connectionString = process.env.NEON_DB_CONNECTION_STRING;
+            return new Client({
+                connectionString: connectionString,
+                ssl: {
+                    rejectUnauthorized: false
+                }
+            });
+        };
+
+        const client = getDbConnection();
+        await client.connect();
+
+        // Check if user is in inaccurate mode
+        const alertQuery = `
+            SELECT a.alert_type, a.id as alert_id
+            FROM alerts a
+            JOIN users u ON a.user_id = u.id
+            WHERE u.username = $1
+        `;
+
+        const { rows: alertRows } = await client.query(alertQuery, [username]);
+
+        if (alertRows.length === 0 || alertRows[0].alert_type !== 'inaccurate') {
+            console.log(`ℹ️ User ${username} is not in inaccurate mode`);
+            await client.end();
+            return false;
+        }
+
+        const alertId = alertRows[0].alert_id;
+        console.log(`⚡ User ${username} is in inaccurate mode, checking position initialization`);
+
+        // Get user's map UIDs
+        const mapsQuery = `
+            SELECT am.mapid
+            FROM alert_maps am
+            WHERE am.alert_id = $1
+        `;
+
+        const { rows: mapRows } = await client.query(mapsQuery, [alertId]);
+        const mapUids = mapRows.map(row => row.mapid);
+
+        if (mapUids.length === 0) {
+            console.log(`ℹ️ No maps found for ${username}`);
+            await client.end();
+            return false;
+        }
+
+        // Check which maps need position initialization
+        const uninitializedMaps = [];
+        for (const mapUid of mapUids) {
+            const positionQuery = `
+                SELECT id FROM map_positions WHERE map_uid = $1
+            `;
+
+            const { rows: positionRows } = await client.query(positionQuery, [mapUid]);
+
+            if (positionRows.length === 0) {
+                uninitializedMaps.push(mapUid);
+            }
+        }
+
+        if (uninitializedMaps.length === 0) {
+            console.log(`✅ All maps for ${username} already have position data`);
+            await client.end();
+            return false;
+        }
+
+        console.log(`🚀 Initializing positions for ${uninitializedMaps.length} maps`);
+
+        // Import the position checking function
+        const { checkMapPositions } = require('./checkMapPositions');
+
+        // Get initial positions for uninitialized maps
+        const positionResults = await checkMapPositions(uninitializedMaps);
+
+        // Store initial positions
+        for (const result of positionResults) {
+            if (result.found) {
+                await client.query(
+                    'INSERT INTO map_positions (map_uid, position, score, last_checked) VALUES ($1, $2, $3, NOW())',
+                    [result.map_uid, result.position, result.score]
+                );
+                console.log(`📝 Initialized position for map ${result.map_uid}: ${result.position}`);
+            }
+        }
+
+        await client.end();
+        console.log(`✅ Position initialization completed for ${username}`);
+        return true;
+
+    } catch (error) {
+        console.error(`❌ Error initializing positions for ${username}:`, error);
+        return false;
+    }
+};
+
 exports.handler = async (event) => {
     console.log('🗺️ mapSearchBackground Lambda triggered from SQS!', event);
 
@@ -228,6 +331,9 @@ exports.handler = async (event) => {
 
             // Update status to processing
             await updateJobStatus(jobId, 'processing');
+
+            // Check if user is in inaccurate mode and needs position initialization
+            const needsPositionInit = await checkAndInitializePositions(username);
 
             // Fetch maps and leaderboards
             const result = await fetchMapsAndLeaderboards(username, period);
