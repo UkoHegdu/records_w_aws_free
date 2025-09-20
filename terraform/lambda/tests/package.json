@@ -1,0 +1,52 @@
+{
+    "name": "trackmania-record-tracker-tests",
+    "version": "1.0.0",
+    "description": "Test suite for Trackmania Record Tracker",
+    "scripts": {
+        "test": "jest",
+        "test:unit": "jest tests/unit",
+        "test:integration": "jest tests/integration",
+        "test:smoke": "node tests/smoke/smoke-tests.js",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage",
+        "test:manual": "node tests/manual/testDriverNotifications.js"
+    },
+    "dependencies": {
+        "bcryptjs": "^2.4.3",
+        "jsonwebtoken": "^9.0.2",
+        "pg": "^8.11.3",
+        "@aws-sdk/client-dynamodb": "^3.450.0",
+        "@aws-sdk/util-dynamodb": "^3.450.0",
+        "uuid": "^9.0.1",
+        "axios": "^1.6.2"
+    },
+    "devDependencies": {
+        "jest": "^29.7.0",
+        "aws-sdk-client-mock": "^3.0.0",
+        "aws-sdk-client-mock-jest": "^3.0.0",
+        "supertest": "^6.3.3"
+    },
+    "jest": {
+        "testEnvironment": "node",
+        "collectCoverageFrom": [
+            "../*.js",
+            "../shared/*.js",
+            "!../node_modules/**",
+            "!../tests/**",
+            "!../*.test.js",
+            "!../*.spec.js"
+        ],
+        "coverageDirectory": "coverage",
+        "coverageReporters": [
+            "text",
+            "lcov",
+            "html"
+        ],
+        "testMatch": [
+            "**/tests/**/*.test.js"
+        ],
+        "moduleNameMapping": {
+            "^@/(.*)$": "<rootDir>/../$1"
+        }
+    }
+}
