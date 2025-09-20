@@ -1,6 +1,6 @@
 # Test Suite
 
-This directory contains all tests for the Trackmania Record Tracker application.
+This directory contains all tests for the Trackmania Record Watcher application.
 
 ## Structure
 
