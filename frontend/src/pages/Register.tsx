@@ -27,8 +27,9 @@ const Register: React.FC = () => {
                 username: selectedUsername
             });
             navigate('/login');
-        } catch (err: any) {
-            const msg = err?.response?.data?.msg || 'Registration failed';
+        } catch (err: unknown) {
+            const error = err as { response?: { data?: { msg?: string } } };
+            const msg = error?.response?.data?.msg || 'Registration failed';
             setError(msg);
         }
     };
@@ -40,6 +41,7 @@ const Register: React.FC = () => {
             );
             setMatchedUsers(res.data.map((u: { Name: string }) => u.Name));
         } catch (err) {
+            console.error('Error searching users:', err);
             setMatchedUsers([]);
         }
     };
@@ -114,8 +116,8 @@ const Register: React.FC = () => {
                                                 type="button"
                                                 onClick={() => setSelectedUsername(name)}
                                                 className={`w-full p-3 rounded-xl text-left transition-all duration-300 ${selectedUsername === name
-                                                        ? 'bg-gradient-to-r from-primary/20 to-secondary-bright/20 text-primary border border-primary/30'
-                                                        : 'bg-muted hover:bg-muted/80 text-foreground'
+                                                    ? 'bg-gradient-to-r from-primary/20 to-secondary-bright/20 text-primary border border-primary/30'
+                                                    : 'bg-muted hover:bg-muted/80 text-foreground'
                                                     }`}
                                             >
                                                 <User className="w-4 h-4 inline mr-2" />
