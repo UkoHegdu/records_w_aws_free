@@ -61,8 +61,9 @@ const DriverPage: React.FC = () => {
                 setShowAddForm(false);
                 fetchNotifications();
             }
-        } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Failed to add notification');
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast.error(err.response?.data?.message || 'Failed to add notification');
         }
     };
 
@@ -75,6 +76,7 @@ const DriverPage: React.FC = () => {
             toast.success('Notification deleted successfully!');
             fetchNotifications();
         } catch (error) {
+            console.error('Error deleting notification:', error);
             toast.error('Failed to delete notification');
         }
     };

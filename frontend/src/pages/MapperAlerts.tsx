@@ -39,6 +39,7 @@ const MapperAlerts: React.FC = () => {
             );
             setMatchedUsers(res.data.map((u: { Name: string }) => u.Name));
         } catch (err) {
+            console.error('Error searching users:', err);
             setMatchedUsers([]);
             toast.error('Failed to search users');
         }
@@ -81,12 +82,13 @@ const MapperAlerts: React.FC = () => {
 
             const response = await apiClient.get('/api/v1/users/create_alert');
             setAlerts(response.data.alerts || []);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error fetching alerts:', error);
-            console.error('Error response:', error.response?.data);
-            console.error('Error status:', error.response?.status);
+            const err = error as { response?: { status: number; data?: unknown } };
+            console.error('Error response:', err.response?.data);
+            console.error('Error status:', err.response?.status);
 
-            if (error.response?.status === 401) {
+            if (err.response?.status === 401) {
                 toast.error('Please log in to view alerts');
             } else {
                 toast.error('Failed to load alerts');
@@ -111,8 +113,9 @@ const MapperAlerts: React.FC = () => {
                 setShowAddForm(false);
                 fetchAlerts();
             }
-        } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Failed to add alert');
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast.error(err.response?.data?.message || 'Failed to add alert');
         }
     };
 
@@ -128,6 +131,7 @@ const MapperAlerts: React.FC = () => {
             toast.success('Alert deleted successfully!');
             fetchAlerts();
         } catch (error) {
+            console.error('Error deleting alert:', error);
             toast.error('Failed to delete alert');
         }
     };
