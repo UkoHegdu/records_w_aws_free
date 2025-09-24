@@ -139,7 +139,7 @@ const MapperNews: React.FC = () => {
                 setError('Job not found. The search may have failed or expired.');
             } else if ((err as { response?: { status?: number } })?.response?.status === 403) {
                 setError('Unable to check job status. Access denied.');
-            } else if ((err as { response?: { status?: number } })?.response?.status && (err as { response?: { status?: number } })?.response?.status! >= 500) {
+            } else if ((err as { response?: { status?: number } })?.response?.status && ((err as { response?: { status?: number } })?.response?.status ?? 0) >= 500) {
                 setError('Server error occurred while checking job status. Please try again.');
             } else {
                 setError(`Error checking job status: ${(err as { message?: string })?.message || 'Unknown error'}`);
