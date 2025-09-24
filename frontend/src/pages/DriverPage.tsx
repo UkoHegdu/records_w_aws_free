@@ -73,7 +73,7 @@ const DriverPage: React.FC = () => {
         try {
             const response = await apiClient.get('/api/v1/users/tm-username');
             setTmUsernameStatus(response.data);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error checking TM username status:', error);
             // If error, assume no TM username set
             setTmUsernameStatus({ hasTmUsername: false });
@@ -99,9 +99,9 @@ const DriverPage: React.FC = () => {
                 setTmUsername('');
                 checkTmUsernameStatus(); // Refresh status
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error verifying TM username:', error);
-            setDialogMessage(error.response?.data?.error || 'Failed to verify Trackmania username');
+            setDialogMessage((error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to verify Trackmania username');
             setShowErrorDialog(true);
         } finally {
             setIsVerifyingTmUsername(false);
@@ -112,10 +112,11 @@ const DriverPage: React.FC = () => {
         try {
             const response = await apiClient.get('/api/v1/driver/notifications');
             setNotifications(response.data.notifications || []);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error fetching notifications:', error);
             // Only show error if it's not a 404 (no notifications) or network error
-            if (error.response?.status !== 404 && error.code !== 'ERR_NETWORK') {
+            if ((error as { response?: { status?: number }; code?: string })?.response?.status !== 404 &&
+                (error as { code?: string })?.code !== 'ERR_NETWORK') {
                 toast.error('Failed to load driver notifications');
             }
         } finally {
@@ -151,9 +152,9 @@ const DriverPage: React.FC = () => {
                 setSearchResults(response.data.results || []);
                 setSearchPagination(response.data.pagination || null);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error searching maps:', error);
-            toast.error(error.response?.data?.error || 'Failed to search maps');
+            toast.error((error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to search maps');
             setSearchResults([]);
             setSearchPagination(null);
         } finally {
@@ -196,13 +197,13 @@ const DriverPage: React.FC = () => {
                 setHasSearched(false);
                 fetchNotifications();
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error adding notification:', error);
-            if (error.response?.data?.requiresTmUsername) {
+            if ((error as { response?: { data?: { requiresTmUsername?: boolean } } })?.response?.data?.requiresTmUsername) {
                 setShowMapDetails(false);
                 setShowTmUsernameModal(true);
             } else {
-                const errorMsg = error.response?.data?.msg || 'Failed to add notification';
+                const errorMsg = (error as { response?: { data?: { msg?: string } } })?.response?.data?.msg || 'Failed to add notification';
                 setDialogMessage(errorMsg);
                 setShowErrorDialog(true);
             }
@@ -216,7 +217,7 @@ const DriverPage: React.FC = () => {
             await apiClient.delete(`/api/v1/driver/notifications/${notificationId}`);
             toast.success('Notification deleted successfully!');
             fetchNotifications();
-        } catch (error) {
+        } catch {
             toast.error('Failed to delete notification');
         }
     };
@@ -508,8 +509,8 @@ const DriverPage: React.FC = () => {
                                                     key={page}
                                                     onClick={() => handlePageChange(page)}
                                                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${page === currentPage
-                                                            ? 'bg-primary text-white'
-                                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                                        ? 'bg-primary text-white'
+                                                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
                                                         }`}
                                                 >
                                                     {page}

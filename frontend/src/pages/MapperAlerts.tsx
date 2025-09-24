@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bell, Plus, Trash2, MapPin, Clock, User, Settings, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import apiClient from '../auth';
@@ -54,7 +54,7 @@ const MapperAlerts: React.FC = () => {
     useEffect(() => {
         fetchAlerts();
         fetchUserLoginInfo();
-    }, []);
+    }, [fetchAlerts]);
 
     // Only fetch notification history if user has alerts
     useEffect(() => {
@@ -90,7 +90,7 @@ const MapperAlerts: React.FC = () => {
         }
     };
 
-    const fetchAlerts = async () => {
+    const fetchAlerts = useCallback(async () => {
         try {
             // Debug: Check if user is logged in
             const token = localStorage.getItem('access_token');
@@ -113,12 +113,12 @@ const MapperAlerts: React.FC = () => {
                     createdAt: new Date().toISOString()
                 });
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error fetching alerts:', error);
-            console.error('Error response:', error.response?.data);
-            console.error('Error status:', error.response?.status);
+            console.error('Error response:', (error as { response?: { data?: unknown } })?.response?.data);
+            console.error('Error status:', (error as { response?: { status?: number } })?.response?.status);
 
-            if (error.response?.status === 401) {
+            if ((error as { response?: { status?: number } })?.response?.status === 401) {
                 toast.error('Please log in to view alerts');
             } else {
                 toast.error('Failed to load alerts');
@@ -126,7 +126,7 @@ const MapperAlerts: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [userProfile]);
 
 
     const handleAddAlert = async (e: React.FormEvent) => {
@@ -143,8 +143,8 @@ const MapperAlerts: React.FC = () => {
                 setShowAddForm(false);
                 fetchAlerts();
             }
-        } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Failed to add alert');
+        } catch (error: unknown) {
+            toast.error((error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to add alert');
         }
     };
 
@@ -162,7 +162,7 @@ const MapperAlerts: React.FC = () => {
             fetchAlerts();
             setShowDeleteModal(false);
             setAlertToDelete(null);
-        } catch (error) {
+        } catch {
             toast.error('Failed to delete alert');
         }
     };
@@ -199,8 +199,8 @@ const MapperAlerts: React.FC = () => {
 
             setShowAddAlertModal(false);
             fetchAlerts();
-        } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Failed to create alert');
+        } catch (error: unknown) {
+            toast.error((error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to create alert');
         }
     };
 

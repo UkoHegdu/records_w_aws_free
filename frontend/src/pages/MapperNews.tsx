@@ -7,12 +7,12 @@ import apiClient from '../auth';
 const MapperNews: React.FC = () => {
     const [mapUid, setMapUid] = useState('wQZaLfhFFBMhAuO0FRdVVLMOzo4');
     const [timeRange, setTimeRange] = useState('1d');
-    const [result, setResult] = useState<any>(null);
+    const [result, setResult] = useState<unknown>(null);
 
     const [usernameQuery, setUsernameQuery] = useState('');
     const [matchedUsers, setMatchedUsers] = useState<string[]>([]);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
-    const [mapsAndLeaderboards, setMapsAndLeaderboards] = useState<any[]>([]);
+    const [mapsAndLeaderboards, setMapsAndLeaderboards] = useState<unknown[]>([]);
     const [loading, setLoading] = useState(false); //spinnneris
     const [jobId, setJobId] = useState<string | null>(null);
     const [jobStatus, setJobStatus] = useState<string>('');
@@ -38,7 +38,7 @@ const MapperNews: React.FC = () => {
                 `/api/v1/records/latest?mapUid=${mapUid}&period=${timeRange}`
             );
             setResult(res.data);
-        } catch (err) {
+        } catch {
             setResult({ error: 'Something went wrong or no record found.' });
         }
     };
@@ -51,7 +51,7 @@ const MapperNews: React.FC = () => {
                 `/api/v1/users/search?username=${usernameQuery}`
             );
             setMatchedUsers(res.data.map((u: { Name: string }) => u.Name));
-        } catch (err) {
+        } catch {
             setMatchedUsers([]);
         }
     };
@@ -131,18 +131,18 @@ const MapperNews: React.FC = () => {
                 return; // Important: return to prevent further execution
             }
             // If status is 'pending' or 'processing', continue polling
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error polling job status:', err);
 
             // Check if it's a 404 or authentication error
-            if (err.response?.status === 404) {
+            if ((err as { response?: { status?: number } })?.response?.status === 404) {
                 setError('Job not found. The search may have failed or expired.');
-            } else if (err.response?.status === 403) {
+            } else if ((err as { response?: { status?: number } })?.response?.status === 403) {
                 setError('Unable to check job status. Access denied.');
-            } else if (err.response?.status >= 500) {
+            } else if ((err as { response?: { status?: number } })?.response?.status && (err as { response?: { status?: number } })?.response?.status >= 500) {
                 setError('Server error occurred while checking job status. Please try again.');
             } else {
-                setError(`Error checking job status: ${err.message}`);
+                setError(`Error checking job status: ${(err as { message?: string })?.message || 'Unknown error'}`);
             }
 
             setLoading(false);
@@ -201,19 +201,19 @@ const MapperNews: React.FC = () => {
                 setMapsAndLeaderboards(res.data);
                 setLoading(false);
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error starting map search:', err);
             setMapsAndLeaderboards([]);
             setLoading(false);
             setJobStatus('error');
 
             // Provide specific error messages
-            if (err.response?.status === 500) {
+            if ((err as { response?: { status?: number } })?.response?.status === 500) {
                 setError('Server error occurred while starting map search. Please try again.');
-            } else if (err.response?.status === 400) {
+            } else if ((err as { response?: { status?: number } })?.response?.status === 400) {
                 setError('Invalid request. Please check the username and try again.');
             } else {
-                setError(`Failed to start map search: ${err.message}`);
+                setError(`Failed to start map search: ${(err as { message?: string })?.message || 'Unknown error'}`);
             }
         }
     };
@@ -499,7 +499,7 @@ const MapperNews: React.FC = () => {
                                         <tbody className="bg-card divide-y divide-border">
                                             {mapsAndLeaderboards.map((entry, idx) =>
                                                 entry.leaderboard && entry.leaderboard.length > 0 ?
-                                                    entry.leaderboard.map((record: any, recordIdx: number) => (
+                                                    entry.leaderboard.map((record: { playerName?: string; position?: number; timestamp?: number; time?: number }, recordIdx: number) => (
                                                         <tr key={`${idx}-${recordIdx}`} className="hover:bg-muted/30 transition-colors duration-200">
                                                             <td className="px-4 py-3 text-sm text-foreground border-b border-border">
                                                                 {entry.mapName}

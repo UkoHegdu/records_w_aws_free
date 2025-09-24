@@ -271,8 +271,9 @@ const Admin: React.FC = () => {
             const response = await apiClient.post('/api/v1/test', {});
             setTestResult(`✅ SUCCESS: Lambda called successfully! Response: ${JSON.stringify(response.data)}`);
             toast.success('Test endpoint worked!');
-        } catch (error: any) {
-            const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+        } catch (error: unknown) {
+            const errorMsg = (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ||
+                (error as { message?: string })?.message || 'Unknown error';
             setTestResult(`❌ FAILED: ${errorMsg}`);
             toast.error('Test endpoint failed');
         } finally {
@@ -288,8 +289,9 @@ const Admin: React.FC = () => {
             const response = await apiClient.post('/api/v1/test-advanced', {});
             setTestResult(`✅ SUCCESS: Advanced Lambda called successfully! Response: ${JSON.stringify(response.data)}`);
             toast.success('Advanced test endpoint worked!');
-        } catch (error: any) {
-            const errorMsg = error.response?.data?.message || error.message || 'Unknown error';
+        } catch (error: unknown) {
+            const errorMsg = (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ||
+                (error as { message?: string })?.message || 'Unknown error';
             setTestResult(`❌ FAILED: ${errorMsg}`);
             toast.error('Advanced test endpoint failed');
         } finally {
