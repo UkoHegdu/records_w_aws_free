@@ -103,7 +103,7 @@ jobs:
 
       - name: Run frontend tests
         working-directory: ./frontend
-        run: npm test -- --coverage --coverageReporters=lcov
+        run: npm test -- --coverage
 
       - name: Upload frontend coverage to Codecov
         uses: codecov/codecov-action@v4
