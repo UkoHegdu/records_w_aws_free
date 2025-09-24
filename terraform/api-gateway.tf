@@ -1364,6 +1364,8 @@ resource "aws_api_gateway_integration_response" "driver_maps_search_options_inte
   http_method = aws_api_gateway_method.driver_maps_search_options.http_method
   status_code = aws_api_gateway_method_response.driver_maps_search_options_200.status_code
 
+  depends_on = [aws_api_gateway_integration.driver_maps_search_options_integration]
+
   response_parameters = {
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
     "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS'"

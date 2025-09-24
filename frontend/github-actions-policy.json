@@ -11,11 +11,13 @@
                 "dynamodb:*",
                 "ses:*",
                 "sns:*",
+                "sqs:*",
                 "ssm:*",
                 "cloudwatch:*",
                 "events:*",
                 "iam:*",
-                "logs:*"
+                "logs:*",
+                "states:*"
             ],
             "Resource": "*"
         }
