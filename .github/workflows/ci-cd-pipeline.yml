@@ -202,6 +202,18 @@ jobs:
         run: |
           terraform init
           terraform workspace select test || terraform workspace new test
+          # Import existing resources if they exist
+          terraform import aws_ses_configuration_set.main recordsw-app-test-ses-config || true
+          terraform import aws_s3_bucket.frontend recordsw-app-test-frontend-test || true
+          terraform import aws_dynamodb_table.auth_tokens recordsw-app-test-auth-tokens || true
+          terraform import aws_dynamodb_table.map_search_results recordsw-app-test-map-search-results || true
+          terraform import aws_dynamodb_table.map_leaderboard_cache recordsw-app-test-map-leaderboard-cache || true
+          terraform import aws_dynamodb_table.user_sessions recordsw-app-test-user-sessions || true
+          terraform import aws_dynamodb_table.driver_notification_jobs recordsw-app-test-driver-notification-jobs || true
+          terraform import aws_dynamodb_table.daily_emails recordsw-app-test-daily-emails || true
+          terraform import aws_iam_role.lambda_role recordsw-app-test-lambda-role || true
+          terraform import aws_iam_role.step_functions_role recordsw-app-test-step-functions-role || true
+          terraform import aws_iam_role.eventbridge_step_functions_role recordsw-app-test-eventbridge-step-functions-role || true
           terraform plan -var="environment=test" -var="app_name=recordsw-app-test"
           terraform apply -var="environment=test" -var="app_name=recordsw-app-test" -auto-approve
 

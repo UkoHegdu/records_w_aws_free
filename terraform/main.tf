@@ -77,7 +77,10 @@ resource "aws_sns_topic_subscription" "error_email" {
   protocol  = "email"
   endpoint  = data.aws_ssm_parameter.error_email.value  # Use separate error email
   
-  # Note: You'll need to confirm this subscription via email
+  # Prevent Terraform from trying to recreate confirmed subscriptions
+  confirmation_timeout_in_minutes = 1
+  
+  # Note: You'll need to confirm this subscription via email (only once)
 }
 
 # SES Configuration
