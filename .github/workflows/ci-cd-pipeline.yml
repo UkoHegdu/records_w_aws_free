@@ -92,7 +92,7 @@ jobs:
       - name: Upload Lambda coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          file: ./terraform/lambda/tests/coverage/lcov.info
+          file: ./terraform/lambda/coverage/lcov.info
           flags: lambda
           name: lambda-coverage
 
@@ -138,7 +138,7 @@ jobs:
           cp ../lambda/*.js .
           cp ../lambda/package.json .
           cp -r ../lambda/shared .
-          cp -r ../tests/manual/*.js .
+          cp ../lambda/tests/manual/*.js .
           npm install --production
           zip -r ../lambda_functions.zip .
           cd ..
