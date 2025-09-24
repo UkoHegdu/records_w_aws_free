@@ -72,16 +72,14 @@ resource "aws_sns_topic" "error_notifications" {
 }
 
 # SNS Topic Subscription for Error Email Notifications
-resource "aws_sns_topic_subscription" "error_email" {
-  topic_arn = aws_sns_topic.error_notifications.arn
-  protocol  = "email"
-  endpoint  = data.aws_ssm_parameter.error_email.value  # Use separate error email
-  
-  # Prevent Terraform from trying to recreate confirmed subscriptions
-  confirmation_timeout_in_minutes = 1
-  
-  # Note: You'll need to confirm this subscription via email (only once)
-}
+# Note: Subscription is manually confirmed and managed outside Terraform
+# to prevent repeated confirmation emails on each deployment
+# resource "aws_sns_topic_subscription" "error_email" {
+#   topic_arn = aws_sns_topic.error_notifications.arn
+#   protocol  = "email"
+#   endpoint  = data.aws_ssm_parameter.error_email.value
+#   confirmation_timeout_in_minutes = 1
+# }
 
 # SES Configuration
 # SES Identity (verified email address)
