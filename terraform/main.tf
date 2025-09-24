@@ -1370,6 +1370,50 @@ resource "aws_lambda_function" "get_notification_history" {
   ]
 }
 
+resource "aws_lambda_function" "submit_feedback" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-submit-feedback"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/submitFeedback.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
+resource "aws_lambda_function" "get_feedback" {
+  filename         = "lambda_functions.zip"
+  function_name    = "${var.app_name}-get-feedback"
+  role            = aws_iam_role.lambda_role.arn
+  handler         = "lambda/getFeedback.handler"
+  runtime         = "nodejs18.x"
+  timeout         = 30
+  source_code_hash = filebase64sha256("lambda_functions.zip")
+
+  environment {
+    variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
+      JWT_SECRET = data.aws_ssm_parameter.jwt_secret.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_policy,
+    aws_iam_role_policy.lambda_dynamodb_policy,
+  ]
+}
+
 # Lambda function for getting admin daily overview
 resource "aws_lambda_function" "get_admin_daily_overview" {
   filename         = "lambda_functions.zip"

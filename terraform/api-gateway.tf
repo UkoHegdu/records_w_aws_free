@@ -1967,6 +1967,111 @@ resource "aws_api_gateway_integration_response" "notification_history_options_in
   }
 }
 
+# Feedback resources
+resource "aws_api_gateway_resource" "feedback" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.v1.id
+  path_part   = "feedback"
+}
+
+# POST /api/v1/feedback
+resource "aws_api_gateway_method" "feedback_post" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.feedback.id
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "feedback_post_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.feedback.id
+  http_method = aws_api_gateway_method.feedback_post.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.submit_feedback.invoke_arn
+}
+
+# GET /api/v1/feedback (admin only)
+resource "aws_api_gateway_method" "feedback_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.feedback.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "feedback_get_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.feedback.id
+  http_method = aws_api_gateway_method.feedback_get.http_method
+
+  integration_http_method = "POST"
+  type                   = "AWS_PROXY"
+  uri                    = aws_lambda_function.get_feedback.invoke_arn
+}
+
+# Lambda permissions for feedback APIs
+resource "aws_lambda_permission" "api_gw_lambda_submit_feedback" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.submit_feedback.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gw_lambda_get_feedback" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.get_feedback.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.api.execution_arn}/*/*"
+}
+
+# OPTIONS method for CORS - /feedback
+resource "aws_api_gateway_method" "feedback_options" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.feedback.id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "feedback_options_integration" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.feedback.id
+  http_method = aws_api_gateway_method.feedback_options.http_method
+
+  type = "MOCK"
+  request_templates = {
+    "application/json" = "{\"statusCode\": 200}"
+  }
+}
+
+resource "aws_api_gateway_method_response" "feedback_options_200" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.feedback.id
+  http_method = aws_api_gateway_method.feedback_options.http_method
+  status_code = "200"
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin" = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "feedback_options_integration_response" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  resource_id = aws_api_gateway_resource.feedback.id
+  http_method = aws_api_gateway_method.feedback_options.http_method
+  status_code = aws_api_gateway_method_response.feedback_options_200.status_code
+
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,OPTIONS'"
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
+  }
+}
+
 # Admin daily overview resources
 resource "aws_api_gateway_resource" "admin_daily_overview" {
   rest_api_id = aws_api_gateway_rest_api.api.id
