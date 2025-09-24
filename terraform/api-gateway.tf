@@ -1727,6 +1727,8 @@ resource "aws_api_gateway_integration_response" "admin_config_options_integratio
   http_method = aws_api_gateway_method.admin_config_options.http_method
   status_code = aws_api_gateway_method_response.admin_config_options_200.status_code
 
+  depends_on = [aws_api_gateway_integration.admin_config_options_integration]
+
   response_parameters = {
     "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
     "method.response.header.Access-Control-Allow-Methods" = "'GET,PUT,OPTIONS'"
