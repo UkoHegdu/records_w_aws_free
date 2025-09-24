@@ -162,8 +162,8 @@ jobs:
           name: frontend-build
           path: frontend/dist
 
-  # Job 4: Deploy to Staging
-  deploy-staging:
+  # Job 4: Deploy to Test
+  deploy-test:
     name: Deploy to Test
     runs-on: ubuntu-latest
     needs: build
@@ -205,28 +205,28 @@ jobs:
           terraform plan -var="environment=test" -var="app_name=recordsw-app-test"
           terraform apply -var="environment=test" -var="app_name=recordsw-app-test" -auto-approve
 
-      - name: Get staging outputs
-        id: staging-outputs
+      - name: Get test outputs
+        id: test-outputs
         working-directory: ./terraform
         run: |
           echo "api_url=$(terraform output -raw api_gateway_url)" >> $GITHUB_OUTPUT
           echo "frontend_url=$(terraform output -raw cloudfront_url)" >> $GITHUB_OUTPUT
+          echo "s3_bucket=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
+          echo "cloudfront_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
 
-      - name: Deploy frontend to staging
+      - name: Deploy frontend to test
         run: |
-          S3_BUCKET=$(cd terraform && terraform output -raw s3_bucket_name)
-          aws s3 sync frontend/dist/ s3://$S3_BUCKET --delete
+          aws s3 sync frontend/dist/ s3://${{ needs.deploy-test.outputs.s3_bucket }} --delete
 
       - name: Invalidate CloudFront
         run: |
-          DISTRIBUTION_ID=$(cd terraform && terraform output -raw cloudfront_distribution_id)
-          aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
+          aws cloudfront create-invalidation --distribution-id ${{ needs.deploy-test.outputs.cloudfront_distribution }} --paths "/*"
 
-  # Job 5: Smoke Tests on Staging
-  smoke-tests-staging:
+  # Job 5: Smoke Tests on Test
+  smoke-tests-test:
     name: Smoke Tests - Test
     runs-on: ubuntu-latest
-    needs: deploy-staging
+    needs: deploy-test
     if: github.ref == 'refs/heads/test'
     steps:
       - name: Checkout code
@@ -241,17 +241,20 @@ jobs:
         working-directory: ./terraform/lambda
         run: npm ci
 
-      - name: Run smoke tests on staging
-        working-directory: ./terraform/lambda/tests
+      - name: Wait for deployment to settle
+        run: sleep 30
+
+      - name: Run smoke tests on test
+        working-directory: ./terraform/lambda/tests/smoke
         env:
-          API_BASE_URL: ${{ needs.deploy-staging.outputs.api_url }}
-        run: npm run test:integration
+          API_BASE_URL: ${{ needs.deploy-test.outputs.api_url }}
+        run: node smoke-tests.js
 
   # Job 6: Deploy to Production
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [build, smoke-tests-staging]
+    needs: [build]
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:
@@ -296,16 +299,16 @@ jobs:
         run: |
           echo "api_url=$(terraform output -raw api_gateway_url)" >> $GITHUB_OUTPUT
           echo "frontend_url=$(terraform output -raw cloudfront_url)" >> $GITHUB_OUTPUT
+          echo "s3_bucket=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
+          echo "cloudfront_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
 
       - name: Deploy frontend to production
         run: |
-          S3_BUCKET=$(cd terraform && terraform output -raw s3_bucket_name)
-          aws s3 sync frontend/dist/ s3://$S3_BUCKET --delete
+          aws s3 sync frontend/dist/ s3://${{ needs.deploy-production.outputs.s3_bucket }} --delete
 
       - name: Invalidate CloudFront
         run: |
-          DISTRIBUTION_ID=$(cd terraform && terraform output -raw cloudfront_distribution_id)
-          aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
+          aws cloudfront create-invalidation --distribution-id ${{ needs.deploy-production.outputs.cloudfront_distribution }} --paths "/*"
 
   # Job 7: Smoke Tests on Production
   smoke-tests-production:
@@ -326,27 +329,30 @@ jobs:
         working-directory: ./terraform/lambda
         run: npm ci
 
+      - name: Wait for deployment to settle
+        run: sleep 30
+
       - name: Run smoke tests on production
-        working-directory: ./terraform/lambda/tests
+        working-directory: ./terraform/lambda/tests/smoke
         env:
           API_BASE_URL: ${{ needs.deploy-production.outputs.api_url }}
-        run: npm run test:integration
+        run: node smoke-tests.js
 
   # Job 8: Notify on Success/Failure
   notify:
     name: Notify Results
     runs-on: ubuntu-latest
-    needs: [smoke-tests-staging, smoke-tests-production]
+    needs: [smoke-tests-test, smoke-tests-production]
     if: always()
     steps:
       - name: Notify on Success
-        if: ${{ needs.smoke-tests-staging.result == 'success' || needs.smoke-tests-production.result == 'success' }}
+        if: ${{ needs.smoke-tests-test.result == 'success' || needs.smoke-tests-production.result == 'success' }}
         run: |
           echo "✅ Deployment successful!"
           # Add Slack/Discord notification here if desired
 
       - name: Notify on Failure
-        if: ${{ needs.smoke-tests-staging.result == 'failure' || needs.smoke-tests-production.result == 'failure' }}
+        if: ${{ needs.smoke-tests-test.result == 'failure' || needs.smoke-tests-production.result == 'failure' }}
         run: |
           echo "❌ Deployment failed!"
           # Add Slack/Discord notification here if desired

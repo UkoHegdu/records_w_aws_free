@@ -7,12 +7,12 @@ import apiClient from '../auth';
 const MapperNews: React.FC = () => {
     const [mapUid, setMapUid] = useState('wQZaLfhFFBMhAuO0FRdVVLMOzo4');
     const [timeRange, setTimeRange] = useState('1d');
-    const [result, setResult] = useState<unknown>(null);
+    const [result, setResult] = useState<{ error?: string; mapsAndLeaderboards?: unknown[] } | null>(null);
 
     const [usernameQuery, setUsernameQuery] = useState('');
     const [matchedUsers, setMatchedUsers] = useState<string[]>([]);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
-    const [mapsAndLeaderboards, setMapsAndLeaderboards] = useState<unknown[]>([]);
+    const [mapsAndLeaderboards, setMapsAndLeaderboards] = useState<{ mapName: string; leaderboard: { playerName?: string; position?: number; timestamp?: number; time?: number }[] }[]>([]);
     const [loading, setLoading] = useState(false); //spinnneris
     const [jobId, setJobId] = useState<string | null>(null);
     const [jobStatus, setJobStatus] = useState<string>('');
@@ -139,7 +139,7 @@ const MapperNews: React.FC = () => {
                 setError('Job not found. The search may have failed or expired.');
             } else if ((err as { response?: { status?: number } })?.response?.status === 403) {
                 setError('Unable to check job status. Access denied.');
-            } else if ((err as { response?: { status?: number } })?.response?.status && (err as { response?: { status?: number } })?.response?.status >= 500) {
+            } else if ((err as { response?: { status?: number } })?.response?.status && (err as { response?: { status?: number } })?.response?.status! >= 500) {
                 setError('Server error occurred while checking job status. Please try again.');
             } else {
                 setError(`Error checking job status: ${(err as { message?: string })?.message || 'Unknown error'}`);
@@ -499,7 +499,7 @@ const MapperNews: React.FC = () => {
                                         <tbody className="bg-card divide-y divide-border">
                                             {mapsAndLeaderboards.map((entry, idx) =>
                                                 entry.leaderboard && entry.leaderboard.length > 0 ?
-                                                    entry.leaderboard.map((record: { playerName?: string; position?: number; timestamp?: number; time?: number }, recordIdx: number) => (
+                                                    entry.leaderboard.map((record, recordIdx: number) => (
                                                         <tr key={`${idx}-${recordIdx}`} className="hover:bg-muted/30 transition-colors duration-200">
                                                             <td className="px-4 py-3 text-sm text-foreground border-b border-border">
                                                                 {entry.mapName}
@@ -511,10 +511,10 @@ const MapperNews: React.FC = () => {
                                                                 #{record.position}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-foreground border-b border-border">
-                                                                {formatDate(record.timestamp)}
+                                                                {record.timestamp ? formatDate(record.timestamp) : 'N/A'}
                                                             </td>
                                                             <td className="px-4 py-3 text-sm text-foreground border-b border-border">
-                                                                {formatTime(record.timestamp)}
+                                                                {record.timestamp ? formatTime(record.timestamp) : 'N/A'}
                                                             </td>
                                                         </tr>
                                                     )) : (

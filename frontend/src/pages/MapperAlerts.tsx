@@ -50,22 +50,6 @@ const MapperAlerts: React.FC = () => {
     const [notificationHistory, setNotificationHistory] = useState<NotificationHistory[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
 
-
-    useEffect(() => {
-        fetchAlerts();
-        fetchUserLoginInfo();
-    }, [fetchAlerts]);
-
-    // Only fetch notification history if user has alerts
-    useEffect(() => {
-        if (alerts.length > 0) {
-            fetchNotificationHistory();
-        } else {
-            // Clear notification history if no alerts
-            setNotificationHistory([]);
-        }
-    }, [alerts.length]);
-
     const fetchUserLoginInfo = async () => {
         try {
             const response = await apiClient.get('/api/v1/users/profile');
@@ -128,6 +112,20 @@ const MapperAlerts: React.FC = () => {
         }
     }, [userProfile]);
 
+    useEffect(() => {
+        fetchAlerts();
+        fetchUserLoginInfo();
+    }, [fetchAlerts]);
+
+    // Only fetch notification history if user has alerts
+    useEffect(() => {
+        if (alerts.length > 0) {
+            fetchNotificationHistory();
+        } else {
+            // Clear notification history if no alerts
+            setNotificationHistory([]);
+        }
+    }, [alerts.length]);
 
     const handleAddAlert = async (e: React.FormEvent) => {
         e.preventDefault();

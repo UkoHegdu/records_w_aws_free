@@ -23,7 +23,7 @@ describe('API Integration Tests', () => {
 
     describe('User Search', () => {
         test('should search for users', async () => {
-            const response = await axios.get(`${baseURL}/api/v1/users/search?username=test`);
+            const response = await axios.get(`${baseURL}/api/v1/users/search?username=the_macho`);
 
             expect(response.status).toBe(200);
             expect(response.data).toHaveProperty('users');
@@ -117,7 +117,7 @@ describe('API Integration Tests', () => {
 
     describe('Map Search Flow', () => {
         test('should initiate map search', async () => {
-            const response = await axios.get(`${baseURL}/api/v1/users/maps?username=test&timeframe=1d`);
+            const response = await axios.get(`${baseURL}/api/v1/users/maps?username=the_macho&timeframe=1d`);
 
             expect(response.status).toBe(200);
             expect(response.data).toHaveProperty('jobId');
@@ -126,7 +126,7 @@ describe('API Integration Tests', () => {
 
         test('should check job status', async () => {
             // First, start a job
-            const searchResponse = await axios.get(`${baseURL}/api/v1/users/maps?username=test&timeframe=1d`);
+            const searchResponse = await axios.get(`${baseURL}/api/v1/users/maps?username=the_macho&timeframe=1d`);
             const jobId = searchResponse.data.jobId;
 
             // Then check status

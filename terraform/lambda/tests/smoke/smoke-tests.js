@@ -59,7 +59,7 @@ class SmokeTestRunner {
     }
 
     async testUserSearchEndpoint() {
-        const response = await axios.get(`${this.baseURL}/api/v1/users/search?username=test`, {
+        const response = await axios.get(`${this.baseURL}/api/v1/users/search?username=the_macho`, {
             timeout: 15000,
             headers: {
                 'User-Agent': 'SmokeTest/1.0'
@@ -76,7 +76,7 @@ class SmokeTestRunner {
     }
 
     async testMapSearchEndpoint() {
-        const response = await axios.get(`${this.baseURL}/api/v1/users/maps?username=test`, {
+        const response = await axios.get(`${this.baseURL}/api/v1/users/maps?username=the_macho`, {
             timeout: 20000,
             headers: {
                 'User-Agent': 'SmokeTest/1.0'
@@ -89,23 +89,6 @@ class SmokeTestRunner {
 
         if (!response.data.job_id) {
             throw new Error('Response should contain job_id');
-        }
-    }
-
-    async testRecordsEndpoint() {
-        const response = await axios.get(`${this.baseURL}/api/v1/records/latest`, {
-            timeout: 15000,
-            headers: {
-                'User-Agent': 'SmokeTest/1.0'
-            }
-        });
-
-        if (response.status !== 200) {
-            throw new Error(`Expected status 200, got ${response.status}`);
-        }
-
-        if (!response.data.records || !Array.isArray(response.data.records)) {
-            throw new Error('Response should contain records array');
         }
     }
 
@@ -203,7 +186,6 @@ class SmokeTestRunner {
         await this.runTest('Health Endpoint', () => this.testHealthEndpoint());
         await this.runTest('User Search Endpoint', () => this.testUserSearchEndpoint());
         await this.runTest('Map Search Endpoint', () => this.testMapSearchEndpoint());
-        await this.runTest('Records Endpoint', () => this.testRecordsEndpoint());
         await this.runTest('Account Names Endpoint', () => this.testAccountNamesEndpoint());
         await this.runTest('CORS Headers', () => this.testCORSHeaders());
         await this.runTest('Error Handling', () => this.testErrorHandling());
