@@ -52,14 +52,6 @@ data "aws_ssm_parameter" "oclient_secret" {
 }
 
 # Neon Database Parameters
-data "aws_ssm_parameter" "neon_db_user" {
-  name = "/${var.environment}/NEON_DB_USER"
-}
-
-data "aws_ssm_parameter" "neon_db_pw" {
-  name = "/${var.environment}/NEON_DB_PW"
-}
-
 data "aws_ssm_parameter" "neon_db_connection_string" {
   name = "/${var.environment}/NEON_DB_CONNECTION_STRING"
 }

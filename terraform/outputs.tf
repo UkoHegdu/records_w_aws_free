@@ -51,8 +51,6 @@ output "parameter_store_parameters" {
     account_api  = data.aws_ssm_parameter.account_api.name
     jwt_secret   = data.aws_ssm_parameter.jwt_secret.name
     email_user   = data.aws_ssm_parameter.email_user.name
-    neon_db_user = data.aws_ssm_parameter.neon_db_user.name
-    neon_db_pw   = data.aws_ssm_parameter.neon_db_pw.name
     neon_db_connection_string = data.aws_ssm_parameter.neon_db_connection_string.name
     error_email = data.aws_ssm_parameter.error_email.name
   }
