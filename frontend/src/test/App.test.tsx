@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { render } from '@testing-library/react'
 import App from '../App'
 
 describe('App', () => {
@@ -8,8 +9,8 @@ describe('App', () => {
         expect(typeof App).toBe('function')
     })
 
-    it('has proper component structure', () => {
-        // Test that App component can be instantiated
-        expect(() => App({})).not.toThrow()
+    it('renders without crashing', () => {
+        // Test that App component can be rendered without errors
+        expect(() => render(<App />)).not.toThrow()
     })
 })
