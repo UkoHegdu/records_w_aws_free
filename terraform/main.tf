@@ -6,6 +6,14 @@ terraform {
       version = "~> 5.0"
     }
   }
+  
+  backend "s3" {
+    bucket         = "recordsw-terraform-state-537928299818"
+    key            = "terraform.tfstate"
+    region         = "eu-north-1"
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {

@@ -202,21 +202,8 @@ jobs:
         run: |
           terraform init
           terraform workspace select test || terraform workspace new test
-          # Try to import existing resources (ignore failures)
-          terraform import aws_ses_configuration_set.main recordsw-app-test-ses-config 2>/dev/null || echo "SES config not found or already imported"
-          terraform import aws_s3_bucket.frontend recordsw-app-test-frontend-test 2>/dev/null || echo "S3 bucket not found or already imported"
-          terraform import aws_dynamodb_table.auth_tokens recordsw-app-test-auth-tokens 2>/dev/null || echo "DynamoDB auth_tokens not found or already imported"
-          terraform import aws_dynamodb_table.map_search_results recordsw-app-test-map-search-results 2>/dev/null || echo "DynamoDB map_search_results not found or already imported"
-          terraform import aws_dynamodb_table.map_leaderboard_cache recordsw-app-test-map-leaderboard-cache 2>/dev/null || echo "DynamoDB map_leaderboard_cache not found or already imported"
-          terraform import aws_dynamodb_table.user_sessions recordsw-app-test-user-sessions 2>/dev/null || echo "DynamoDB user_sessions not found or already imported"
-          terraform import aws_dynamodb_table.driver_notification_jobs recordsw-app-test-driver-notification-jobs 2>/dev/null || echo "DynamoDB driver_notification_jobs not found or already imported"
-          terraform import aws_dynamodb_table.daily_emails recordsw-app-test-daily-emails 2>/dev/null || echo "DynamoDB daily_emails not found or already imported"
-          terraform import aws_iam_role.lambda_role recordsw-app-test-lambda-role 2>/dev/null || echo "IAM lambda_role not found or already imported"
-          terraform import aws_iam_role.step_functions_role recordsw-app-test-step-functions-role 2>/dev/null || echo "IAM step_functions_role not found or already imported"
-          terraform import aws_iam_role.eventbridge_step_functions_role recordsw-app-test-eventbridge-step-functions-role 2>/dev/null || echo "IAM eventbridge_step_functions_role not found or already imported"
           terraform plan -var="environment=test" -var="app_name=recordsw-app-test"
-          # If plan shows resources that already exist, use replace to force recreation
-          terraform apply -var="environment=test" -var="app_name=recordsw-app-test" -auto-approve -replace="aws_ses_configuration_set.main" -replace="aws_s3_bucket.frontend" -replace="aws_dynamodb_table.auth_tokens" -replace="aws_dynamodb_table.map_search_results" -replace="aws_dynamodb_table.map_leaderboard_cache" -replace="aws_dynamodb_table.user_sessions" -replace="aws_dynamodb_table.driver_notification_jobs" -replace="aws_dynamodb_table.daily_emails" -replace="aws_iam_role.lambda_role" -replace="aws_iam_role.step_functions_role" -replace="aws_iam_role.eventbridge_step_functions_role"
+          terraform apply -var="environment=test" -var="app_name=recordsw-app-test" -auto-approve
 
       - name: Get test outputs
         id: test-outputs
