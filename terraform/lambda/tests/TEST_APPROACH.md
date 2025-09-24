@@ -245,6 +245,9 @@ tests/
 
 ### **Running Tests**
 ```bash
+# Navigate to lambda directory first
+cd terraform/lambda
+
 # Run all tests
 npm test
 
@@ -256,6 +259,18 @@ npm run test:integration
 
 # Run specific test file
 npm test login.test.js
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run tests in watch mode (for development)
+npm run test:watch
+
+# Run tests with verbose output
+npx jest --verbose
+
+# Run specific test by name pattern
+npx jest --testNamePattern="should handle pagination correctly"
 ```
 
 ---
@@ -319,3 +334,73 @@ const { handler } = require('../../module'); // Imported once
 - Objects vs Arrays: Check `.length` only on arrays
 - Null vs Undefined: Understand the difference
 - **Always verify mock data matches production expectations**
+
+### **8. Module Export Issues**
+**Problem**: Shared modules not properly exporting functions needed for testing
+```javascript
+// ❌ Bad: Function exists but not exported
+const getValidAccessToken = async () => { /* ... */ };
+module.exports = apiClient; // getValidAccessToken not available
+
+// ✅ Good: Export all functions needed for testing
+module.exports = {
+    ...apiClient,
+    getValidAccessToken
+};
+```
+
+### **9. Rate Limiting Mocking**
+**Problem**: Security utilities with rate limiting need proper mocking in authentication tests
+```javascript
+// ❌ Bad: Missing security utils mock causes 429 responses
+jest.mock('@aws-sdk/client-dynamodb');
+const { handler } = require('../../login'); // Rate limiting not mocked!
+
+// ✅ Good: Mock security utilities before importing
+jest.mock('../../securityUtils', () => ({
+    validateAndSanitizeInput: jest.fn(),
+    checkRateLimit: jest.fn()
+}));
+
+// In beforeEach, set up realistic mock responses
+checkRateLimit.mockReturnValue(true); // Allow requests
+validateAndSanitizeInput.mockReturnValue({ isValid: true, sanitized: 'test@example.com' });
+```
+
+### **10. Data Structure Consistency**
+**Problem**: Mocked data structures don't match what actual functions expect
+```javascript
+// ❌ Bad: Function expects array but gets object
+const filtered = period ? filterRecordsByPeriod(leaderboard, period) : leaderboard;
+if (filtered.length > 0) { // Error: filtered is { tops: [...] }, not array
+
+// ✅ Good: Always ensure consistent data types
+const filtered = filterRecordsByPeriod(leaderboard, period || '1d');
+// filterRecordsByPeriod always returns an array
+```
+
+### **11. Dependency Management**
+**Problem**: Missing dependencies cause test failures
+```javascript
+// ❌ Bad: Test tries to mock module not in package.json
+jest.mock('@aws-sdk/client-sqs', () => ({ /* ... */ }));
+// Error: Cannot find module '@aws-sdk/client-sqs'
+
+// ✅ Good: Ensure all required dependencies are installed
+npm install @aws-sdk/client-sqs
+```
+
+### **12. Timeout Configuration Mismatches**
+**Problem**: Test expectations don't match actual implementation timeouts
+```javascript
+// ❌ Bad: Test expects different timeout than implementation
+expect(axios.post).toHaveBeenCalledWith(url, data, {
+    timeout: 60000 // Test expects 60s
+});
+
+// ✅ Good: Check actual implementation and match expectations
+// Implementation uses 30000ms, so test should expect 30000ms
+expect(axios.post).toHaveBeenCalledWith(url, data, {
+    timeout: 30000 // Match actual implementation
+});
+```

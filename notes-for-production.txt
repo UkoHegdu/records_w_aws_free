@@ -1,0 +1,16 @@
+# Production Deployment Notes
+
+## Security
+
+- [ ] Have more restrictive CORS setup for production
+  - Currently using `Access-Control-Allow-Origin: *` which allows any domain
+  - Should restrict to specific domains like `https://d120e83vth7qvx.cloudfront.net`
+  - Consider environment-specific CORS configurations
+
+## Infrastructure
+
+## Performance
+
+## Monitoring
+
+## Backup & Recovery

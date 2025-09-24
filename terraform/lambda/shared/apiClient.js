@@ -231,4 +231,7 @@ const apiClient = {
     }
 };
 
-module.exports = apiClient;
+module.exports = {
+    ...apiClient,
+    getValidAccessToken
+};

@@ -9,6 +9,10 @@ jest.mock('@aws-sdk/client-dynamodb');
 jest.mock('pg');
 jest.mock('bcryptjs');
 jest.mock('jsonwebtoken');
+jest.mock('../../securityUtils', () => ({
+    validateAndSanitizeInput: jest.fn(),
+    checkRateLimit: jest.fn()
+}));
 
 // Create mock DynamoDB client before importing login
 const mockDynamoClient = {
@@ -23,6 +27,7 @@ describe('Login Lambda', () => {
     let mockEvent;
     let mockContext;
     let mockPgClient;
+    const { validateAndSanitizeInput, checkRateLimit } = require('../../securityUtils');
 
     beforeEach(() => {
         // Mock environment variables
@@ -51,6 +56,10 @@ describe('Login Lambda', () => {
 
         // Mock bcrypt
         bcrypt.compare.mockResolvedValue(true);
+
+        // Mock security utils
+        checkRateLimit.mockReturnValue(true);
+        validateAndSanitizeInput.mockReturnValue({ isValid: true, sanitized: 'test@example.com' });
 
         // Mock JWT - set up after clearAllMocks
         jwt.sign.mockImplementation((payload, secret, options) => {
@@ -141,13 +150,8 @@ describe('Login Lambda', () => {
     });
 
     test('should return 400 for missing email', async () => {
-        // Mock database connection
-        mockPgClient.connect.mockResolvedValueOnce();
-
-        // Mock empty query result (no user found)
-        mockPgClient.query.mockResolvedValueOnce({
-            rows: []
-        });
+        // Mock validation to return invalid for missing email
+        validateAndSanitizeInput.mockReturnValueOnce({ isValid: false, error: 'Email is required' });
 
         mockEvent.body = JSON.stringify({
             password: 'password123'
@@ -155,9 +159,9 @@ describe('Login Lambda', () => {
 
         const result = await handler(mockEvent, mockContext);
 
-        expect(result.statusCode).toBe(401);
+        expect(result.statusCode).toBe(400);
         const body = JSON.parse(result.body);
-        expect(body.msg).toContain('Invalid credentials');
+        expect(body.msg).toContain('Email is required');
     });
 
     test('should return 400 for missing password', async () => {
@@ -173,6 +177,9 @@ describe('Login Lambda', () => {
     });
 
     test('should return 401 for invalid credentials', async () => {
+        // Mock database connection
+        mockPgClient.connect.mockResolvedValueOnce();
+
         // Mock user not found
         mockPgClient.query.mockResolvedValueOnce({
             rows: []
@@ -186,6 +193,9 @@ describe('Login Lambda', () => {
     });
 
     test('should return 401 for incorrect password', async () => {
+        // Mock database connection
+        mockPgClient.connect.mockResolvedValueOnce();
+
         // Mock user found but wrong password
         mockPgClient.query.mockResolvedValueOnce({
             rows: [{

@@ -2,17 +2,46 @@
     "name": "trackmania-lambda-functions",
     "version": "1.0.0",
     "description": "Lambda functions for Trackmania record alerts app",
+    "scripts": {
+        "test": "jest",
+        "test:unit": "jest tests/unit",
+        "test:integration": "jest tests/integration",
+        "test:coverage": "jest --coverage",
+        "test:watch": "jest --watch"
+    },
     "dependencies": {
         "axios": "^1.7.0",
         "@aws-sdk/client-dynamodb": "^3.500.0",
         "@aws-sdk/lib-dynamodb": "^3.500.0",
         "@aws-sdk/client-lambda": "^3.500.0",
         "@aws-sdk/client-ses": "^3.500.0",
+        "@aws-sdk/client-sqs": "^3.500.0",
         "aws-sdk": "^2.1691.0",
         "pg": "^8.11.3",
         "qs": "^6.13.0",
         "bcryptjs": "^2.4.3",
         "jsonwebtoken": "^9.0.2",
         "uuid": "^9.0.1"
+    },
+    "devDependencies": {
+        "jest": "^29.7.0"
+    },
+    "jest": {
+        "testEnvironment": "node",
+        "testMatch": [
+            "**/tests/**/*.test.js"
+        ],
+        "collectCoverageFrom": [
+            "*.js",
+            "shared/*.js",
+            "!tests/**",
+            "!node_modules/**"
+        ],
+        "coverageDirectory": "coverage",
+        "coverageReporters": [
+            "text",
+            "lcov",
+            "html"
+        ]
     }
 }

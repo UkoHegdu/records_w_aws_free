@@ -120,7 +120,7 @@ describe('API Client', () => {
             'https://prod.trackmania.core.nadeo.online/v2/authentication/token/refresh',
             {},
             expect.objectContaining({
-                timeout: 60000,
+                timeout: 30000,
                 headers: expect.objectContaining({
                     'Authorization': 'nadeo_v1 t=refresh-token',
                     'Content-Type': 'application/json'

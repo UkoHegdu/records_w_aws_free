@@ -100,7 +100,7 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
 
     for (const map of allResults) {
         const leaderboard = await fetchWithRetry(() => getRecordsFromApi(map.MapUid));
-        const filtered = period ? filterRecordsByPeriod(leaderboard, period) : leaderboard;
+        const filtered = filterRecordsByPeriod(leaderboard, period || '1d');
 
         if (filtered.length > 0) {
             mapsAndLeaderboards.push({
