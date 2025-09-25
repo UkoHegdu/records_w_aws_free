@@ -33,16 +33,22 @@ const Login: React.FC<LoginProps> = ({ setIsLoggedIn }) => {
                 toast.success('Welcome back to TrackMania!');
                 navigate('/');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Login error:', error);
 
             // Handle different error types
-            if (error.response?.status === 429) {
-                toast.error('Too many login attempts. Please wait 5 minutes before trying again.');
-            } else if (error.response?.status === 401) {
-                toast.error('Invalid credentials. Please check your username and password.');
-            } else if (error.response?.data?.msg) {
-                toast.error(error.response.data.msg);
+            if (error && typeof error === 'object' && 'response' in error) {
+                const axiosError = error as { response?: { status?: number; data?: { msg?: string } } };
+
+                if (axiosError.response?.status === 429) {
+                    toast.error('Too many login attempts. Please wait 5 minutes before trying again.');
+                } else if (axiosError.response?.status === 401) {
+                    toast.error('Invalid credentials. Please check your username and password.');
+                } else if (axiosError.response?.data?.msg) {
+                    toast.error(axiosError.response.data.msg);
+                } else {
+                    toast.error('Login failed. Please try again.');
+                }
             } else {
                 toast.error('Login failed. Please try again.');
             }
