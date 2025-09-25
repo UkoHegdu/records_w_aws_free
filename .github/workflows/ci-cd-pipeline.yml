@@ -40,9 +40,10 @@ jobs:
         working-directory: ./terraform/lambda
         run: npm ci
 
-      # SonarCloud Analysis
+      # SonarCloud Analysis (Main branch only)
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v5
+        if: github.ref == 'refs/heads/main'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
@@ -54,7 +55,7 @@ jobs:
             -Dsonar.lang.patterns.js=**/*.js,**/*.jsx
             -Dsonar.lang.patterns.ts=**/*.ts,**/*.tsx
 
-      # GitHub CodeQL Analysis (Free) - Upload disabled due to permissions
+      # GitHub CodeQL Analysis (All branches)
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -63,7 +64,7 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          upload: false
+          upload: true
 
   # Job 2: Unit Tests
   unit-tests:
