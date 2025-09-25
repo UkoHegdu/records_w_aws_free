@@ -89,3 +89,101 @@ Fully serverless AWS application following best practices for "forever free" usa
 - **DynamoDB Caching:** Cached leaderboard data reduces API calls
 - **Sequential Processing:** Respects TrackMania API rate limits (2 req/sec)
 - **CSS Optimization:** Hybrid approach with utility classes and CSS for better performance
+
+## Deployment & CI/CD
+
+### Current Status
+✅ **Test Environment:** Fully deployed and operational  
+✅ **CI/CD Pipeline:** Automated deployment via GitHub Actions  
+✅ **State Management:** Terraform state stored in S3 with DynamoDB locking  
+⏳ **Production Environment:** Ready for deployment when needed  
+
+### Environments
+
+**Test Environment:**
+- **Branch:** `test`
+- **Auto-deploy:** On push to `test` branch
+
+**Production Environment:**
+- **Branch:** `main`
+- **Auto-deploy:** On push to `main` branch (when enabled)
+
+### CI/CD Pipeline
+
+The application uses GitHub Actions for automated deployment:
+
+1. **Build & Test:** Frontend build and tests
+2. **Deploy Test:** Automatic deployment to test environment on `test` branch pushes
+3. **Deploy Production:** Automatic deployment to production on `main` branch pushes
+4. **Health Checks:** Automated health endpoint validation
+5. **CloudFront Invalidation:** Automatic cache invalidation after deployment
+
+### Manual Deployment
+
+For manual deployment, use the provided scripts:
+
+```bash
+# Deploy to test environment
+cd terraform
+terraform workspace select test
+terraform apply
+
+# Deploy to production environment  
+cd terraform
+terraform workspace select production
+terraform apply
+```
+
+### Infrastructure Management
+
+**Terraform Configuration:**
+- **State Storage:** S3 bucket with DynamoDB locking
+- **Workspaces:** Separate workspaces for test and production
+- **State Locking:** Prevents concurrent modifications
+- **Environment Variables:** Stored in AWS Parameter Store
+
+**Key Commands:**
+```bash
+# Check current workspace
+terraform workspace show
+
+# List all resources
+terraform state list
+
+# Get outputs
+terraform output
+
+# Get specific output
+terraform output cloudfront_url
+terraform output api_gateway_url
+```
+
+## Getting Started
+
+### Prerequisites
+- AWS CLI configured with appropriate permissions
+- Terraform installed
+- Node.js 18+ for local development
+- Access to AWS Parameter Store for environment variables
+
+### Local Development
+```bash
+# Install dependencies
+cd frontend
+npm install
+
+# Start development server
+npm run dev
+
+# Run tests
+npm test
+```
+
+### Environment Setup
+Environment variables are managed through AWS Parameter Store. The following parameters are required:
+- `EMAIL_USER` - SES verified email address
+- `AUTH_API_URL` - Trackmania authentication API URL
+- `LEAD_API` - Trackmania leaderboard API URL
+- `JWT_SECRET` - Secret key for JWT token signing
+- `NEON_DB_CONNECTION_STRING` - PostgreSQL database connection string
+- And others as defined in `terraform/main.tf`

@@ -40,21 +40,21 @@ jobs:
         working-directory: ./terraform/lambda
         run: npm ci
 
-      # SonarCloud Analysis (Temporarily disabled due to Node.js compatibility issues)
-      # - name: SonarCloud Scan
-      #   uses: SonarSource/sonarcloud-github-action@v2.0.0
-      #   timeout-minutes: 10
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      #   with:
-      #     args: >
-      #       -Dsonar.projectKey=UkoHegdu_records_w_aws_free
-      #       -Dsonar.organization=recordsw
-      #       -Dsonar.sources=terraform/lambda,frontend/src
-      #       -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.js,**/*.spec.js
-      #       -Dsonar.lang.patterns.js=**/*.js,**/*.jsx
-      #       -Dsonar.lang.patterns.ts=**/*.ts,**/*.tsx
+      # SonarCloud Analysis
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2.0.0
+        timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=UkoHegdu_records_w_aws_free
+            -Dsonar.organization=recordsw
+            -Dsonar.sources=terraform/lambda,frontend/src
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.js,**/*.spec.js
+            -Dsonar.lang.patterns.js=**/*.js,**/*.jsx
+            -Dsonar.lang.patterns.ts=**/*.ts,**/*.tsx
 
       # GitHub CodeQL Analysis (Free) - Upload disabled due to permissions
       - name: Initialize CodeQL
