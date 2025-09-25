@@ -33,9 +33,19 @@ const Login: React.FC<LoginProps> = ({ setIsLoggedIn }) => {
                 toast.success('Welcome back to TrackMania!');
                 navigate('/');
             }
-        } catch (error) {
-            toast.error('Invalid credentials. Please try again.');
+        } catch (error: any) {
             console.error('Login error:', error);
+
+            // Handle different error types
+            if (error.response?.status === 429) {
+                toast.error('Too many login attempts. Please wait 5 minutes before trying again.');
+            } else if (error.response?.status === 401) {
+                toast.error('Invalid credentials. Please check your username and password.');
+            } else if (error.response?.data?.msg) {
+                toast.error(error.response.data.msg);
+            } else {
+                toast.error('Login failed. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }

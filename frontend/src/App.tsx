@@ -12,7 +12,6 @@ import DriverPage from './pages/DriverPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Admin from './pages/Admin';
-import Dashboard from './pages/Dashboard';
 
 const App: React.FC = () => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -77,14 +76,6 @@ const App: React.FC = () => {
                                 element={
                                     <AdminRoute>
                                         <Admin />
-                                    </AdminRoute>
-                                }
-                            />
-                            <Route
-                                path="/Dashboard"
-                                element={
-                                    <AdminRoute>
-                                        <Dashboard />
                                     </AdminRoute>
                                 }
                             />

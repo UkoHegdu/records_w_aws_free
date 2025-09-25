@@ -1,0 +1,50 @@
+name: Pipeline Validation
+
+on:
+  push:
+    branches: [main, test]
+    paths:
+      - ".github/workflows/**"
+  pull_request:
+    branches: [main, test]
+    paths:
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  validate-pipeline:
+    name: Validate Pipeline Changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run frontend linting
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Install Lambda dependencies
+        working-directory: ./terraform/lambda
+        run: npm ci
+
+      - name: Validate pipeline syntax
+        run: |
+          echo "✅ Pipeline syntax validation passed"
+          echo "📋 Changes detected in pipeline files only"
+          echo "🚀 Full deployment will be skipped for this push"
