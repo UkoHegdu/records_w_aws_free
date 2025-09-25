@@ -8,6 +8,13 @@ on:
       - "docs/**"
       - "*.md"
       - "CHANGELOG.md"
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "Force deployment (useful after pipeline fixes)"
+        required: false
+        default: false
+        type: boolean
   pull_request:
     branches: [main, test]
     paths-ignore:
@@ -169,7 +176,7 @@ jobs:
     name: Deploy to Test
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/test'
+    if: github.ref == 'refs/heads/test' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/test')
     environment: test
     outputs:
       api_url: ${{ steps.test-outputs.outputs.api_url }}
@@ -215,6 +222,23 @@ jobs:
           echo "s3_bucket=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
           echo "cloudfront_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
 
+      - name: Cache frontend dependencies
+        uses: actions/cache@v3
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-frontend-deps-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-deps-
+
+      - name: Cache frontend build artifacts
+        uses: actions/cache@v3
+        with:
+          path: frontend/dist
+          key: ${{ runner.os }}-frontend-build-${{ github.sha }}-${{ hashFiles('frontend/src/**/*') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-build-${{ github.sha }}-
+            ${{ runner.os }}-frontend-build-
+
       - name: Setup Node.js for frontend build
         uses: actions/setup-node@v4
         with:
@@ -223,9 +247,16 @@ jobs:
       - name: Build frontend with API URL
         working-directory: ./frontend
         run: |
-          npm ci
-          echo "VITE_BACKEND_URL=${{ steps.test-outputs.outputs.api_url }}" > .env.production
-          npm run build
+          # Check if build artifacts already exist from cache
+          if [ -d "dist" ] && [ "$(ls -A dist)" ] && [ "${{ github.event.inputs.force_deploy }}" != "true" ]; then
+            echo "✅ Using cached build artifacts"
+            echo "VITE_BACKEND_URL=${{ steps.test-outputs.outputs.api_url }}" > .env.production
+          else
+            echo "🔄 Building frontend from scratch"
+            npm ci
+            echo "VITE_BACKEND_URL=${{ steps.test-outputs.outputs.api_url }}" > .env.production
+            npm run build
+          fi
 
       - name: Deploy frontend to test
         run: |
@@ -256,7 +287,7 @@ jobs:
     name: Smoke Tests - Test
     runs-on: ubuntu-latest
     needs: deploy-test
-    if: github.ref == 'refs/heads/test'
+    if: github.ref == 'refs/heads/test' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/test')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -287,7 +318,7 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [build]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     environment: production
     outputs:
       api_url: ${{ steps.production-outputs.outputs.api_url }}
@@ -333,6 +364,23 @@ jobs:
           echo "s3_bucket=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
           echo "cloudfront_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
 
+      - name: Cache frontend dependencies
+        uses: actions/cache@v3
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-frontend-deps-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-deps-
+
+      - name: Cache frontend build artifacts
+        uses: actions/cache@v3
+        with:
+          path: frontend/dist
+          key: ${{ runner.os }}-frontend-build-${{ github.sha }}-${{ hashFiles('frontend/src/**/*') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-build-${{ github.sha }}-
+            ${{ runner.os }}-frontend-build-
+
       - name: Setup Node.js for frontend build
         uses: actions/setup-node@v4
         with:
@@ -341,9 +389,16 @@ jobs:
       - name: Build frontend with API URL
         working-directory: ./frontend
         run: |
-          npm ci
-          echo "VITE_BACKEND_URL=${{ steps.production-outputs.outputs.api_url }}" > .env.production
-          npm run build
+          # Check if build artifacts already exist from cache
+          if [ -d "dist" ] && [ "$(ls -A dist)" ] && [ "${{ github.event.inputs.force_deploy }}" != "true" ]; then
+            echo "✅ Using cached build artifacts"
+            echo "VITE_BACKEND_URL=${{ steps.production-outputs.outputs.api_url }}" > .env.production
+          else
+            echo "🔄 Building frontend from scratch"
+            npm ci
+            echo "VITE_BACKEND_URL=${{ steps.production-outputs.outputs.api_url }}" > .env.production
+            npm run build
+          fi
 
       - name: Deploy frontend to production
         run: |
