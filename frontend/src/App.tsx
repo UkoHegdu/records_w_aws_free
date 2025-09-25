@@ -4,7 +4,7 @@ import { Toaster } from 'sonner';
 import Sidebar from './components/Layout/sidebar';
 import { isAdmin } from './auth';
 
-// Import all pages
+// Import all pages.
 import Landing from './pages/Landing';
 import MapperAlerts from './pages/MapperAlerts';
 import MapperNews from './pages/MapperNews';
