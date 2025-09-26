@@ -313,10 +313,10 @@ jobs:
     if: (github.ref == 'refs/heads/test' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/test')) && always() && !(needs.build-from-cache.result == 'success' && needs.build-frontend.result == 'skipped' && needs.build-lambda.result == 'skipped')
     environment: test
     outputs:
-      api_url: ${{ steps.test-outputs.outputs.api_url }}
-      frontend_url: ${{ steps.test-outputs.outputs.frontend_url }}
-      s3_bucket: ${{ steps.test-outputs.outputs.s3_bucket }}
-      cloudfront_distribution: ${{ steps.test-outputs.outputs.cloudfront_distribution }}
+      api_url: ${{ steps.test-outputs.outputs.api_url || steps.test-outputs-env.outputs.api_url }}
+      frontend_url: ${{ steps.test-outputs.outputs.frontend_url || steps.test-outputs-env.outputs.frontend_url }}
+      s3_bucket: ${{ steps.test-outputs.outputs.s3_bucket || steps.test-outputs-env.outputs.s3_bucket }}
+      cloudfront_distribution: ${{ steps.test-outputs.outputs.cloudfront_distribution || steps.test-outputs-env.outputs.cloudfront_distribution }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -375,7 +375,7 @@ jobs:
 
       - name: Get test outputs (from environment)
         if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
-        id: test-outputs
+        id: test-outputs-env
         run: |
           echo "api_url=${{ env.TEST_API_URL }}" >> $GITHUB_OUTPUT
           echo "frontend_url=${{ env.TEST_FRONTEND_URL }}" >> $GITHUB_OUTPUT
@@ -465,10 +465,10 @@ jobs:
     if: (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && !(needs.build-from-cache.result == 'success' && needs.build-frontend.result == 'skipped' && needs.build-lambda.result == 'skipped')
     environment: production
     outputs:
-      api_url: ${{ steps.production-outputs.outputs.api_url }}
-      frontend_url: ${{ steps.production-outputs.outputs.frontend_url }}
-      s3_bucket: ${{ steps.production-outputs.outputs.s3_bucket }}
-      cloudfront_distribution: ${{ steps.production-outputs.outputs.cloudfront_distribution }}
+      api_url: ${{ steps.production-outputs.outputs.api_url || steps.production-outputs-env.outputs.api_url }}
+      frontend_url: ${{ steps.production-outputs.outputs.frontend_url || steps.production-outputs-env.outputs.frontend_url }}
+      s3_bucket: ${{ steps.production-outputs.outputs.s3_bucket || steps.production-outputs-env.outputs.s3_bucket }}
+      cloudfront_distribution: ${{ steps.production-outputs.outputs.cloudfront_distribution || steps.production-outputs-env.outputs.cloudfront_distribution }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -527,7 +527,7 @@ jobs:
 
       - name: Get production outputs (from environment)
         if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
-        id: production-outputs
+        id: production-outputs-env
         run: |
           echo "api_url=${{ env.PROD_API_URL }}" >> $GITHUB_OUTPUT
           echo "frontend_url=${{ env.PROD_FRONTEND_URL }}" >> $GITHUB_OUTPUT
