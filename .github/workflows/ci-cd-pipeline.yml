@@ -44,11 +44,47 @@ jobs:
   code-quality:
     name: Code Quality & Security
     runs-on: ubuntu-latest
+    outputs:
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      lambda-changed: ${{ steps.changes.outputs.lambda }}
+      pipeline-changed: ${{ steps.changes.outputs.pipeline }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Required for SonarCloud
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Get changed files from the push event
+            changed_files=$(git diff --name-only HEAD~1 HEAD)
+            echo "Changed files: $changed_files"
+            
+            if echo "$changed_files" | grep -q "^frontend/"; then
+              echo "frontend=true" >> $GITHUB_OUTPUT
+            else
+              echo "frontend=false" >> $GITHUB_OUTPUT
+            fi
+            
+            if echo "$changed_files" | grep -q "^terraform/lambda/"; then
+              echo "lambda=true" >> $GITHUB_OUTPUT
+            else
+              echo "lambda=false" >> $GITHUB_OUTPUT
+            fi
+            
+            if echo "$changed_files" | grep -q "^\.github/workflows/"; then
+              echo "pipeline=true" >> $GITHUB_OUTPUT
+            else
+              echo "pipeline=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            # For manual triggers, check inputs
+            echo "frontend=${{ github.event.inputs.frontend_only == 'true' || github.event.inputs.force_deploy == 'true' }}" >> $GITHUB_OUTPUT
+            echo "lambda=${{ github.event.inputs.force_deploy == 'true' }}" >> $GITHUB_OUTPUT
+            echo "pipeline=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -145,50 +181,23 @@ jobs:
     name: Build Frontend
     runs-on: ubuntu-latest
     needs: [code-quality, unit-tests]
-    if: contains(github.event.head_commit.modified, 'frontend/') || contains(github.event.head_commit.added, 'frontend/') || github.event.inputs.force_deploy == 'true' || github.event.inputs.frontend_only == 'true'
+    if: needs.code-quality.outputs.frontend-changed == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Debug file changes
-        run: |
-          echo "Modified files: ${{ github.event.head_commit.modified }}"
-          echo "Added files: ${{ github.event.head_commit.added }}"
-          echo "Contains frontend: ${{ contains(github.event.head_commit.modified, 'frontend/') }}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Cache frontend dependencies
-        uses: actions/cache@v3
-        with:
-          path: frontend/node_modules
-          key: ${{ runner.os }}-frontend-deps-${{ hashFiles('frontend/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-frontend-deps-
-
-      - name: Cache frontend build artifacts
-        uses: actions/cache@v3
-        with:
-          path: frontend/dist
-          key: ${{ runner.os }}-frontend-build-${{ github.ref_name }}-${{ hashFiles('frontend/src/**/*') }}
-          restore-keys: |
-            ${{ runner.os }}-frontend-build-${{ github.ref_name }}-
-            ${{ runner.os }}-frontend-build-
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
 
       - name: Build frontend
         working-directory: ./frontend
-        run: |
-          # Check if build artifacts already exist from cache
-          if [ -d "dist" ] && [ "$(ls -A dist)" ] && [ "${{ github.event.inputs.force_deploy }}" != "true" ]; then
-            echo "✅ Using cached build artifacts"
-          else
-            echo "🔄 Building frontend from scratch"
-            npm ci
-            npm run build
-          fi
+        run: npm run build
 
       - name: Upload frontend build
         uses: actions/upload-artifact@v4
@@ -201,7 +210,7 @@ jobs:
     name: Build Lambda
     runs-on: ubuntu-latest
     needs: [code-quality, unit-tests]
-    if: contains(github.event.head_commit.modified, 'terraform/lambda/') || contains(github.event.head_commit.added, 'terraform/lambda/') || github.event.inputs.force_deploy == 'true'
+    if: needs.code-quality.outputs.lambda-changed == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -235,90 +244,12 @@ jobs:
           name: lambda-package
           path: terraform/lambda_functions.zip
 
-  # Job 5: Build from Cache (only when both frontend and lambda builds are skipped)
-  build-from-cache:
-    name: Build from Cache
-    runs-on: ubuntu-latest
-    needs: [code-quality, unit-tests, build-frontend, build-lambda]
-    if: always() && needs.build-frontend.result == 'skipped' && needs.build-lambda.result == 'skipped' && (contains(github.event.head_commit.modified, '.github/workflows/') || github.event.inputs.force_deploy == 'true')
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Check for cached frontend artifacts
-        id: check-frontend-cache
-        uses: actions/cache@v3
-        with:
-          path: frontend/dist
-          key: ${{ runner.os }}-frontend-build-${{ github.ref_name }}-${{ hashFiles('frontend/src/**/*') }}
-          restore-keys: |
-            ${{ runner.os }}-frontend-build-${{ github.ref_name }}-
-            ${{ runner.os }}-frontend-build-
-
-      - name: Build frontend from cache (if available)
-        if: steps.check-frontend-cache.outputs.cache-hit == 'true'
-        working-directory: ./frontend
-        run: |
-          echo "✅ Found cached frontend artifacts, rebuilding with dependencies..."
-          npm ci
-          npm run build
-
-      - name: Upload frontend build (if cached)
-        if: steps.check-frontend-cache.outputs.cache-hit == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build
-          path: frontend/dist
-
-      - name: Check for previous frontend artifacts
-        id: check-previous-frontend
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build
-          path: frontend/dist/
-
-      - name: Build frontend from previous artifacts (if available)
-        if: steps.check-previous-frontend.outcome == 'success'
-        working-directory: ./frontend
-        run: |
-          echo "✅ Found previous frontend artifacts, rebuilding with dependencies..."
-          npm ci
-          npm run build
-
-      - name: Upload frontend build (if previous artifacts found)
-        if: steps.check-previous-frontend.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build
-          path: frontend/dist
-
-      - name: Skip deployment if no artifacts found
-        if: steps.check-frontend-cache.outputs.cache-hit == 'false' && steps.check-previous-frontend.outcome != 'success'
-        run: |
-          echo "✅ Pipeline-only changes detected with no cached or previous artifacts"
-          echo "🚀 Pipeline updated successfully - no deployment needed"
-          echo "Next code change will use the updated pipeline"
-          echo "SUCCESS" > pipeline_status.txt
-
-      - name: Upload success marker (no deployment needed)
-        if: steps.check-frontend-cache.outputs.cache-hit == 'false' && steps.check-previous-frontend.outcome != 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipeline-only-success
-          path: pipeline_status.txt
-
-  # Job 6: Deploy to Test
+  # Job 5: Deploy to Test
   deploy-test:
     name: Deploy to Test
     runs-on: ubuntu-latest
-    needs: [build-frontend, build-lambda, build-from-cache]
-    if: (github.ref == 'refs/heads/test' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/test')) && always() && (needs.build-frontend.result == 'success' || needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success')
+    needs: [build-frontend, build-lambda]
+    if: (github.ref == 'refs/heads/test' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/test')) && always() && (needs.build-frontend.result == 'success' || needs.build-lambda.result == 'success')
     environment: test
     outputs:
       api_url: ${{ steps.test-outputs.outputs.api_url || steps.test-outputs-env.outputs.api_url }}
@@ -337,14 +268,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download Lambda package (if Lambda was built)
-        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-lambda.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: lambda-package
           path: terraform/
 
       - name: Download frontend build (if frontend was built)
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: frontend-build
@@ -356,7 +287,7 @@ jobs:
           terraform_version: 1.6.0
 
       - name: Deploy to Test (with Lambda changes)
-        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-lambda.result == 'success'
         working-directory: ./terraform
         run: |
           terraform init
@@ -365,14 +296,14 @@ jobs:
           terraform apply -var="environment=test" -var="app_name=recordsw-app-test" -auto-approve
 
       - name: Skip Terraform (frontend-only deployment)
-        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        if: needs.build-lambda.result != 'success'
         run: |
           echo "✅ Frontend-only deployment detected"
           echo "🚀 Skipping Terraform - no Lambda changes"
           echo "Frontend will be deployed directly to S3"
 
       - name: Get test outputs (from Terraform)
-        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-lambda.result == 'success'
         id: test-outputs
         working-directory: ./terraform
         run: |
@@ -382,7 +313,7 @@ jobs:
           echo "cloudfront_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
 
       - name: Get test outputs (from environment)
-        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        if: needs.build-lambda.result != 'success'
         id: test-outputs-env
         run: |
           echo "api_url=${{ env.TEST_API_URL }}" >> $GITHUB_OUTPUT
@@ -391,18 +322,18 @@ jobs:
           echo "cloudfront_distribution=${{ env.TEST_CLOUDFRONT_DISTRIBUTION }}" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js for frontend rebuild
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install frontend dependencies for rebuild
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         working-directory: ./frontend
         run: npm ci
 
       - name: Rebuild frontend with API URL
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         working-directory: ./frontend
         run: |
           echo "🔧 Rebuilding frontend with API URL: ${{ steps.test-outputs.outputs.api_url }}"
@@ -411,7 +342,7 @@ jobs:
           echo "✅ Frontend rebuilt with correct API URL"
 
       - name: Deploy frontend to test
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         run: |
           if [ -d "frontend/dist" ]; then
             aws s3 sync frontend/dist/ s3://${{ steps.test-outputs.outputs.s3_bucket }} --delete
@@ -494,14 +425,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download Lambda package (if Lambda was built)
-        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-lambda.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: lambda-package
           path: terraform/
 
       - name: Download frontend build (if frontend was built)
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: frontend-build
@@ -513,7 +444,7 @@ jobs:
           terraform_version: 1.6.0
 
       - name: Deploy to Production (with Lambda changes)
-        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-lambda.result == 'success'
         working-directory: ./terraform
         run: |
           terraform init
@@ -522,14 +453,14 @@ jobs:
           terraform apply -var="environment=prod" -var="app_name=recordsw-app" -auto-approve
 
       - name: Skip Terraform (frontend-only deployment)
-        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        if: needs.build-lambda.result != 'success'
         run: |
           echo "✅ Frontend-only deployment detected"
           echo "🚀 Skipping Terraform - no Lambda changes"
           echo "Frontend will be deployed directly to S3"
 
       - name: Get production outputs (from Terraform)
-        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-lambda.result == 'success'
         id: production-outputs
         working-directory: ./terraform
         run: |
@@ -539,7 +470,7 @@ jobs:
           echo "cloudfront_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
 
       - name: Get production outputs (from environment)
-        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        if: needs.build-lambda.result != 'success'
         id: production-outputs-env
         run: |
           echo "api_url=${{ env.PROD_API_URL }}" >> $GITHUB_OUTPUT
@@ -548,18 +479,18 @@ jobs:
           echo "cloudfront_distribution=${{ env.PROD_CLOUDFRONT_DISTRIBUTION }}" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js for frontend rebuild
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install frontend dependencies for rebuild
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         working-directory: ./frontend
         run: npm ci
 
       - name: Rebuild frontend with API URL
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         working-directory: ./frontend
         run: |
           echo "🔧 Rebuilding frontend with API URL: ${{ steps.production-outputs.outputs.api_url }}"
@@ -568,7 +499,7 @@ jobs:
           echo "✅ Frontend rebuilt with correct API URL"
 
       - name: Deploy frontend to production
-        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
+        if: needs.build-frontend.result == 'success'
         run: |
           if [ -d "frontend/dist" ]; then
             aws s3 sync frontend/dist/ s3://${{ steps.production-outputs.outputs.s3_bucket }} --delete
