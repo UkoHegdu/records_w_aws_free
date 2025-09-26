@@ -3,11 +3,12 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main, test]
-    paths-ignore:
-      - ".github/workflows/**"
-      - "docs/**"
-      - "*.md"
-      - "CHANGELOG.md"
+    paths:
+      - "frontend/**"
+      - "terraform/lambda/**"
+      - "terraform/*.tf"
+      - "terraform/*.tfvars"
+      - ".github/workflows/ci-cd-pipeline.yml"
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -22,11 +23,12 @@ on:
         type: boolean
   pull_request:
     branches: [main, test]
-    paths-ignore:
-      - ".github/workflows/**"
-      - "docs/**"
-      - "*.md"
-      - "CHANGELOG.md"
+    paths:
+      - "frontend/**"
+      - "terraform/lambda/**"
+      - "terraform/*.tf"
+      - "terraform/*.tfvars"
+      - ".github/workflows/ci-cd-pipeline.yml"
 
 permissions:
   contents: read
@@ -403,8 +405,13 @@ jobs:
           echo "✅ Frontend rebuilt with correct API URL"
 
       - name: Deploy frontend to test
+        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
         run: |
-          aws s3 sync frontend/dist/ s3://${{ steps.test-outputs.outputs.s3_bucket }} --delete
+          if [ -d "frontend/dist" ]; then
+            aws s3 sync frontend/dist/ s3://${{ steps.test-outputs.outputs.s3_bucket }} --delete
+          else
+            echo "No frontend artifacts to deploy"
+          fi
 
       - name: Invalidate CloudFront
         run: |
@@ -555,8 +562,13 @@ jobs:
           echo "✅ Frontend rebuilt with correct API URL"
 
       - name: Deploy frontend to production
+        if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
         run: |
-          aws s3 sync frontend/dist/ s3://${{ steps.production-outputs.outputs.s3_bucket }} --delete
+          if [ -d "frontend/dist" ]; then
+            aws s3 sync frontend/dist/ s3://${{ steps.production-outputs.outputs.s3_bucket }} --delete
+          else
+            echo "No frontend artifacts to deploy"
+          fi
 
       - name: Invalidate CloudFront
         run: |
