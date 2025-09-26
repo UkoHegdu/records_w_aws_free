@@ -235,12 +235,12 @@ jobs:
           name: lambda-package
           path: terraform/lambda_functions.zip
 
-  # Job 5: Build from Cache (for pipeline-only changes)
+  # Job 5: Build from Cache (only when both frontend and lambda builds are skipped)
   build-from-cache:
     name: Build from Cache
     runs-on: ubuntu-latest
-    needs: [code-quality, unit-tests]
-    if: contains(github.event.head_commit.modified, '.github/workflows/') && !contains(github.event.head_commit.modified, 'frontend/') && !contains(github.event.head_commit.modified, 'terraform/lambda/') && !github.event.inputs.force_deploy
+    needs: [code-quality, unit-tests, build-frontend, build-lambda]
+    if: always() && needs.build-frontend.result == 'skipped' && needs.build-lambda.result == 'skipped' && (contains(github.event.head_commit.modified, '.github/workflows/') || github.event.inputs.force_deploy == 'true')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
