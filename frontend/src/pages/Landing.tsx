@@ -34,7 +34,7 @@ const Landing: React.FC = () => {
     ];
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('access_token');
         setIsLoggedIn(!!token);
 
         if (token) {
@@ -46,7 +46,17 @@ const Landing: React.FC = () => {
         try {
             setStatsLoading(true);
             const response = await apiClient.get('/api/v1/admin/daily-overview');
-            setStats(response.data.site_stats);
+            // Safely access site_stats with fallback
+            const siteStats = response.data?.site_stats || response.data;
+            if (siteStats && typeof siteStats === 'object') {
+                setStats({
+                    total_users: siteStats.total_users || 0,
+                    total_alerts_sent: siteStats.total_alerts_sent || 0,
+                    total_driver_notifications: siteStats.total_driver_notifications || 0
+                });
+            } else {
+                throw new Error('Invalid response structure');
+            }
         } catch (error) {
             console.error('Error loading site stats:', error);
             // Use mock data if API fails
@@ -190,19 +200,19 @@ const Landing: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="text-center p-6 bg-gradient-to-br from-blue-500/10 to-blue-600/10 rounded-xl border border-blue-500/20">
                                         <Users className="w-8 h-8 text-blue-500 mx-auto mb-3" />
-                                        <div className="text-3xl font-bold text-blue-500 mb-1">{stats.total_users}</div>
+                                        <div className="text-3xl font-bold text-blue-500 mb-1">{stats?.total_users || 0}</div>
                                         <div className="text-sm text-muted-foreground">Registered Users</div>
                                     </div>
 
                                     <div className="text-center p-6 bg-gradient-to-br from-green-500/10 to-green-600/10 rounded-xl border border-green-500/20">
                                         <Bell className="w-8 h-8 text-green-500 mx-auto mb-3" />
-                                        <div className="text-3xl font-bold text-green-500 mb-1">{stats.total_alerts_sent}</div>
+                                        <div className="text-3xl font-bold text-green-500 mb-1">{stats?.total_alerts_sent || 0}</div>
                                         <div className="text-sm text-muted-foreground">Alerts Sent</div>
                                     </div>
 
                                     <div className="text-center p-6 bg-gradient-to-br from-purple-500/10 to-purple-600/10 rounded-xl border border-purple-500/20">
                                         <MapPin className="w-8 h-8 text-purple-500 mx-auto mb-3" />
-                                        <div className="text-3xl font-bold text-purple-500 mb-1">{stats.total_driver_notifications}</div>
+                                        <div className="text-3xl font-bold text-purple-500 mb-1">{stats?.total_driver_notifications || 0}</div>
                                         <div className="text-sm text-muted-foreground">Driver Notifications</div>
                                     </div>
                                 </div>
