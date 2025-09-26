@@ -267,16 +267,39 @@ jobs:
           name: frontend-build
           path: frontend/dist
 
-      - name: Skip deployment if no cached artifacts
-        if: steps.check-frontend-cache.outputs.cache-hit == 'false'
+      - name: Check for previous frontend artifacts
+        id: check-previous-frontend
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+
+      - name: Build frontend from previous artifacts (if available)
+        if: steps.check-previous-frontend.outcome == 'success'
+        working-directory: ./frontend
         run: |
-          echo "✅ Pipeline-only changes detected with no cached artifacts"
+          echo "✅ Found previous frontend artifacts, rebuilding with dependencies..."
+          npm ci
+          npm run build
+
+      - name: Upload frontend build (if previous artifacts found)
+        if: steps.check-previous-frontend.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist
+
+      - name: Skip deployment if no artifacts found
+        if: steps.check-frontend-cache.outputs.cache-hit == 'false' && steps.check-previous-frontend.outcome != 'success'
+        run: |
+          echo "✅ Pipeline-only changes detected with no cached or previous artifacts"
           echo "🚀 Pipeline updated successfully - no deployment needed"
           echo "Next code change will use the updated pipeline"
           echo "SUCCESS" > pipeline_status.txt
 
       - name: Upload success marker (no deployment needed)
-        if: steps.check-frontend-cache.outputs.cache-hit == 'false'
+        if: steps.check-frontend-cache.outputs.cache-hit == 'false' && steps.check-previous-frontend.outcome != 'success'
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-only-success
@@ -312,14 +335,6 @@ jobs:
           name: lambda-package
           path: terraform/
 
-      - name: Create empty Lambda zip (if no Lambda artifacts)
-        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
-        run: |
-          echo "📦 No Lambda artifacts found, creating empty zip for Terraform..."
-          mkdir -p terraform
-          touch terraform/lambda_functions.zip
-          echo "✅ Empty Lambda zip created for Terraform compatibility"
-
       - name: Download frontend build (if frontend was built)
         if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
         uses: actions/download-artifact@v4
@@ -332,7 +347,8 @@ jobs:
         with:
           terraform_version: 1.6.0
 
-      - name: Deploy to Test
+      - name: Deploy to Test (with Lambda changes)
+        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
         working-directory: ./terraform
         run: |
           terraform init
@@ -340,7 +356,15 @@ jobs:
           terraform plan -var="environment=test" -var="app_name=recordsw-app-test"
           terraform apply -var="environment=test" -var="app_name=recordsw-app-test" -auto-approve
 
-      - name: Get test outputs
+      - name: Skip Terraform (frontend-only deployment)
+        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        run: |
+          echo "✅ Frontend-only deployment detected"
+          echo "🚀 Skipping Terraform - no Lambda changes"
+          echo "Frontend will be deployed directly to S3"
+
+      - name: Get test outputs (from Terraform)
+        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
         id: test-outputs
         working-directory: ./terraform
         run: |
@@ -348,6 +372,15 @@ jobs:
           echo "frontend_url=$(terraform output -raw cloudfront_url)" >> $GITHUB_OUTPUT
           echo "s3_bucket=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
           echo "cloudfront_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
+
+      - name: Get test outputs (from environment)
+        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        id: test-outputs
+        run: |
+          echo "api_url=${{ env.TEST_API_URL }}" >> $GITHUB_OUTPUT
+          echo "frontend_url=${{ env.TEST_FRONTEND_URL }}" >> $GITHUB_OUTPUT
+          echo "s3_bucket=${{ env.TEST_S3_BUCKET }}" >> $GITHUB_OUTPUT
+          echo "cloudfront_distribution=${{ env.TEST_CLOUDFRONT_DISTRIBUTION }}" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js for frontend rebuild
         if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
@@ -454,14 +487,6 @@ jobs:
           name: lambda-package
           path: terraform/
 
-      - name: Create empty Lambda zip (if no Lambda artifacts)
-        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
-        run: |
-          echo "📦 No Lambda artifacts found, creating empty zip for Terraform..."
-          mkdir -p terraform
-          touch terraform/lambda_functions.zip
-          echo "✅ Empty Lambda zip created for Terraform compatibility"
-
       - name: Download frontend build (if frontend was built)
         if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
         uses: actions/download-artifact@v4
@@ -474,7 +499,8 @@ jobs:
         with:
           terraform_version: 1.6.0
 
-      - name: Deploy to Production
+      - name: Deploy to Production (with Lambda changes)
+        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
         working-directory: ./terraform
         run: |
           terraform init
@@ -482,7 +508,15 @@ jobs:
           terraform plan -var="environment=prod" -var="app_name=recordsw-app"
           terraform apply -var="environment=prod" -var="app_name=recordsw-app" -auto-approve
 
-      - name: Get production outputs
+      - name: Skip Terraform (frontend-only deployment)
+        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        run: |
+          echo "✅ Frontend-only deployment detected"
+          echo "🚀 Skipping Terraform - no Lambda changes"
+          echo "Frontend will be deployed directly to S3"
+
+      - name: Get production outputs (from Terraform)
+        if: needs.build-lambda.result == 'success' || needs.build-from-cache.result == 'success'
         id: production-outputs
         working-directory: ./terraform
         run: |
@@ -490,6 +524,15 @@ jobs:
           echo "frontend_url=$(terraform output -raw cloudfront_url)" >> $GITHUB_OUTPUT
           echo "s3_bucket=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
           echo "cloudfront_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
+
+      - name: Get production outputs (from environment)
+        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        id: production-outputs
+        run: |
+          echo "api_url=${{ env.PROD_API_URL }}" >> $GITHUB_OUTPUT
+          echo "frontend_url=${{ env.PROD_FRONTEND_URL }}" >> $GITHUB_OUTPUT
+          echo "s3_bucket=${{ env.PROD_S3_BUCKET }}" >> $GITHUB_OUTPUT
+          echo "cloudfront_distribution=${{ env.PROD_CLOUDFRONT_DISTRIBUTION }}" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js for frontend rebuild
         if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
