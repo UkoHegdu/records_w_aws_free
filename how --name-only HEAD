@@ -1,0 +1,5 @@
+[33mda5eab3[m[33m ([m[1;36mHEAD -> [m[1;32mtest[m[33m, [m[1;31morigin/test[m[33m)[m frontend auth token fix & pipeline improved for frontend only changes. artifact caching added
+[33mf2c2a00[m manual workaround not working, forcing build/deploy
+[33m7f98370[m pipeline updates for artifact caching and manual deployment forcing
+[33m164f1b7[m cloudfront cache invalidation improvement
+[33m1424754[m linting errors...

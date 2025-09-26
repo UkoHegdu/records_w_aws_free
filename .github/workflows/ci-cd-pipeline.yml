@@ -312,6 +312,14 @@ jobs:
           name: lambda-package
           path: terraform/
 
+      - name: Create empty Lambda zip (if no Lambda artifacts)
+        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        run: |
+          echo "📦 No Lambda artifacts found, creating empty zip for Terraform..."
+          mkdir -p terraform
+          touch terraform/lambda_functions.zip
+          echo "✅ Empty Lambda zip created for Terraform compatibility"
+
       - name: Download frontend build (if frontend was built)
         if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
         uses: actions/download-artifact@v4
@@ -445,6 +453,14 @@ jobs:
         with:
           name: lambda-package
           path: terraform/
+
+      - name: Create empty Lambda zip (if no Lambda artifacts)
+        if: needs.build-lambda.result != 'success' && needs.build-from-cache.result != 'success'
+        run: |
+          echo "📦 No Lambda artifacts found, creating empty zip for Terraform..."
+          mkdir -p terraform
+          touch terraform/lambda_functions.zip
+          echo "✅ Empty Lambda zip created for Terraform compatibility"
 
       - name: Download frontend build (if frontend was built)
         if: needs.build-frontend.result == 'success' || needs.build-from-cache.result == 'success'
