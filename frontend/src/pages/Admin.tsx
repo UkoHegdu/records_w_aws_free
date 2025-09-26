@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, MapPin, Bell, Shield, X, RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, BarChart3 } from 'lucide-react';
+import { Users, MapPin, Bell, Shield, X, RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock, BarChart3, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import apiClient, { isAdmin } from '../auth';
 
@@ -54,17 +54,27 @@ interface DailySummary {
     }>;
 }
 
+interface Feedback {
+    id: number;
+    username: string;
+    message: string;
+    type: string;
+    created_at: string;
+}
+
 const Admin: React.FC = () => {
     const [configs, setConfigs] = useState<ConfigValue[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [usersLoading, setUsersLoading] = useState(false);
     const [activeModal, setActiveModal] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
-    const [activeTab, setActiveTab] = useState<'users' | 'logs' | 'test'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'logs' | 'test' | 'feedback'>('users');
     const [dailySummaries, setDailySummaries] = useState<DailySummary[]>([]);
     const [logsLoading, setLogsLoading] = useState(false);
     const [selectedDay, setSelectedDay] = useState<DailySummary | null>(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
+    const [feedback, setFeedback] = useState<Feedback[]>([]);
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
 
     // Test section state
     const [testResult, setTestResult] = useState<string>('');
@@ -140,6 +150,19 @@ const Admin: React.FC = () => {
             toast.error('Failed to fetch daily overview');
         } finally {
             setLogsLoading(false);
+        }
+    };
+
+    const loadFeedback = async () => {
+        try {
+            setFeedbackLoading(true);
+            const response = await apiClient.get('/api/v1/feedback');
+            setFeedback(response.data.feedback);
+        } catch (error) {
+            console.error('Error fetching feedback:', error);
+            toast.error('Failed to fetch feedback');
+        } finally {
+            setFeedbackLoading(false);
         }
     };
 
@@ -512,6 +535,19 @@ const Admin: React.FC = () => {
                         >
                             <Bell className="w-4 h-4 inline mr-2" />
                             Test
+                        </button>
+                        <button
+                            onClick={() => {
+                                setActiveTab('feedback');
+                                loadFeedback();
+                            }}
+                            className={`px-6 py-3 rounded-lg font-medium transition-all ${activeTab === 'feedback'
+                                ? 'bg-primary text-white'
+                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                }`}
+                        >
+                            <MessageSquare className="w-4 h-4 inline mr-2" />
+                            Feedback
                         </button>
                     </div>
 
@@ -952,6 +988,70 @@ const Admin: React.FC = () => {
                                 )}
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* Feedback Tab */}
+                {activeTab === 'feedback' && (
+                    <div>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-semibold flex items-center gap-2">
+                                <MessageSquare className="w-5 h-5" />
+                                User Feedback
+                            </h2>
+                            <button
+                                onClick={loadFeedback}
+                                disabled={feedbackLoading}
+                                className="btn-racing text-sm flex items-center gap-2"
+                            >
+                                <RefreshCw className={`w-4 h-4 ${feedbackLoading ? 'animate-spin' : ''}`} />
+                                Refresh
+                            </button>
+                        </div>
+
+                        {feedbackLoading ? (
+                            <div className="flex justify-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                            </div>
+                        ) : feedback.length > 0 ? (
+                            <div className="space-y-4">
+                                {feedback.map((item) => (
+                                    <div key={item.id} className="racing-card">
+                                        <div className="flex items-start justify-between mb-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                                                    <MessageSquare className="w-4 h-4 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-semibold text-foreground">{item.username}</h3>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {new Date(item.created_at).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.type === 'bug' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                                                item.type === 'feature' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                                                    item.type === 'general' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                                                        'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                                                }`}>
+                                                {item.type}
+                                            </span>
+                                        </div>
+                                        <div className="bg-muted/50 p-4 rounded-lg">
+                                            <p className="text-foreground whitespace-pre-wrap">{item.message}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="racing-card text-center py-8">
+                                <div className="text-muted-foreground">
+                                    <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                                    <h3 className="text-lg font-medium mb-2">No Feedback Yet</h3>
+                                    <p className="text-sm">User feedback will appear here once submitted.</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
