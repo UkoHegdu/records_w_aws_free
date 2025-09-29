@@ -369,10 +369,8 @@ jobs:
         if: needs.build-frontend.result == 'success'
         working-directory: ./frontend
         run: |
-          echo "🔧 Rebuilding frontend with API URL: ${{ steps.test-outputs.outputs.api_url }}"
-          echo "Debug: Testing variable availability: '${{ steps.test-outputs.outputs.api_url }}'"
-          echo "Debug: Testing fallback variable: '${{ steps.test-outputs-env.outputs.api_url }}'"
-          echo "VITE_BACKEND_URL=${{ steps.test-outputs.outputs.api_url }}" > .env.production
+          echo "🔧 Rebuilding frontend with API URL: ${{ steps.test-outputs.outputs.api_url || steps.test-outputs-env.outputs.api_url }}"
+          echo "VITE_BACKEND_URL=${{ steps.test-outputs.outputs.api_url || steps.test-outputs-env.outputs.api_url }}" > .env.production
           npm run build
           echo "✅ Frontend rebuilt with correct API URL"
 
