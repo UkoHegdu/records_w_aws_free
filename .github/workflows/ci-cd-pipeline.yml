@@ -149,6 +149,7 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: code-quality
+    if: needs.code-quality.outputs.frontend-changed == 'true' || needs.code-quality.outputs.lambda-changed == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
