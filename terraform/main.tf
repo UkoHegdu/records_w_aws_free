@@ -957,6 +957,7 @@ resource "aws_lambda_function" "schedulerProcessor" {
 
   environment {
     variables = {
+      NEON_DB_CONNECTION_STRING = data.aws_ssm_parameter.neon_db_connection_string.value
       DAILY_EMAILS_TABLE_NAME = aws_dynamodb_table.daily_emails.name
       DYNAMODB_TABLE_NAME = aws_dynamodb_table.auth_tokens.name
       MAP_LEADERBOARD_CACHE_TABLE_NAME = aws_dynamodb_table.map_leaderboard_cache.name
