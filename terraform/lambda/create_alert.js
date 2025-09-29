@@ -3,7 +3,7 @@ const { Client } = require('pg');
 const jwt = require('jsonwebtoken');
 const { validateAndSanitizeInput, checkRateLimit } = require('./securityUtils');
 
-// Database connection using Neon
+// Database connection using Neon (brackets for forcing backend build)
 const getDbConnection = () => {
     const connectionString = process.env.NEON_DB_CONNECTION_STRING;
     return new Client({
