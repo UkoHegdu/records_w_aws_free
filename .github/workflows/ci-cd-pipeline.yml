@@ -333,6 +333,17 @@ jobs:
         run: |
           terraform init
           terraform workspace select test || terraform workspace new test
+          echo "Debug: All Terraform outputs:"
+          terraform output
+          echo "Debug: API Gateway URL:"
+          terraform output api_gateway_url
+          echo "Debug: CloudFront URL:"
+          terraform output cloudfront_url
+          echo "Debug: S3 Bucket:"
+          terraform output s3_bucket_name
+          echo "Debug: CloudFront Distribution:"
+          terraform output cloudfront_distribution_id
+          echo "Setting outputs for next steps:"
           echo "api_url=$(terraform output -raw api_gateway_url)" >> $GITHUB_OUTPUT
           echo "frontend_url=$(terraform output -raw cloudfront_url)" >> $GITHUB_OUTPUT
           echo "s3_bucket=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
