@@ -84,7 +84,7 @@ const withRetry = async (operation, operationName, retries = RETRY_CONFIG.maxRet
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             console.log(`🔄 ${operationName} - Attempt ${attempt}/${retries}`);
-            const result = await withTimeout(operation(), RETRY_CONFIG.timeoutMs);
+            const result = await withTimeout(operation, RETRY_CONFIG.timeoutMs);
             console.log(`✅ ${operationName} - Success on attempt ${attempt}`);
             return result;
         } catch (error) {

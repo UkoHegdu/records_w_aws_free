@@ -78,7 +78,7 @@ exports.handler = async (event, context) => {
 
         const { message, type = 'general' } = body;
 
-        // Rate limiting per user
+        // Rate limiting per user (5 feedbacks per 5 minutes)
         const authHeader = event.headers.Authorization || event.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
@@ -100,7 +100,7 @@ exports.handler = async (event, context) => {
         }
 
         // Validate and sanitize inputs
-        const messageValidation = validateAndSanitizeInput(message, 'string', { required: true, maxLength: 2000 });
+        const messageValidation = validateAndSanitizeInput(message, 'string', { required: true, maxLength: 2000, minLength: 10 });
         const typeValidation = validateAndSanitizeInput(type, 'string', { required: false, maxLength: 50 });
 
         if (!messageValidation.isValid) {

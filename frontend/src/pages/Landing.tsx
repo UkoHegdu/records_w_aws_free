@@ -72,23 +72,39 @@ const Landing: React.FC = () => {
 
     const handleFeedbackSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!feedback.trim()) {
+
+        const trimmedFeedback = feedback.trim();
+
+        if (!trimmedFeedback) {
             toast.error('Please enter your feedback');
+            return;
+        }
+
+        if (trimmedFeedback.length < 10) {
+            toast.error('Feedback must be at least 10 characters long');
             return;
         }
 
         try {
             setFeedbackLoading(true);
-            await apiClient.post('/api/v1/feedback', {
-                message: feedback.trim(),
+            const response = await apiClient.post('/api/v1/feedback', {
+                message: trimmedFeedback,
                 type: 'general'
             });
 
             toast.success('Thank you for your feedback! We appreciate your input.');
             setFeedback('');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error submitting feedback:', error);
-            toast.error('Failed to submit feedback. Please try again.');
+
+            // Handle specific error cases
+            if (error.response?.status === 429) {
+                toast.error('Rate limit exceeded. Please wait before submitting more feedback.');
+            } else if (error.response?.status === 400) {
+                toast.error(error.response.data?.error || 'Invalid feedback. Please check your message and try again.');
+            } else {
+                toast.error('Failed to submit feedback. Please try again.');
+            }
         } finally {
             setFeedbackLoading(false);
         }
@@ -237,6 +253,9 @@ const Landing: React.FC = () => {
                                 <div>
                                     <label htmlFor="feedback" className="block text-sm font-medium text-foreground mb-2">
                                         Your Feedback
+                                        <span className="text-xs text-muted-foreground ml-2">
+                                            (Minimum 10 characters, maximum 5 submissions per 5 minutes)
+                                        </span>
                                     </label>
                                     <textarea
                                         id="feedback"
@@ -247,12 +266,22 @@ const Landing: React.FC = () => {
                                         placeholder="Tell us what you think, report bugs, or suggest new features..."
                                         disabled={feedbackLoading}
                                     />
+                                    <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
+                                        <span className={feedback.trim().length < 10 && feedback.trim().length > 0 ? 'text-red-400' : ''}>
+                                            {feedback.trim().length}/2000 characters
+                                        </span>
+                                        {feedback.trim().length > 0 && feedback.trim().length < 10 && (
+                                            <span className="text-red-400">
+                                                Minimum 10 characters required
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="flex justify-end">
                                     <button
                                         type="submit"
-                                        disabled={feedbackLoading || !feedback.trim()}
+                                        disabled={feedbackLoading || !feedback.trim() || feedback.trim().length < 10}
                                         className="btn-racing inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {feedbackLoading ? (

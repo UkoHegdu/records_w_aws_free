@@ -2,7 +2,9 @@ import React, { useState, useEffect, ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import Sidebar from './components/Layout/sidebar';
+import EnvironmentBanner from './components/EnvironmentBanner';
 import { isAdmin } from './auth';
+import { isTestEnvironment } from './utils/environment';
 
 // Import all pages.
 import Landing from './pages/Landing';
@@ -40,7 +42,8 @@ const App: React.FC = () => {
 
     return (
         <Router>
-            <div className="min-h-screen bg-gradient-to-br from-background via-background to-card">
+            <div className={`min-h-screen bg-gradient-to-br from-background via-background to-card ${isTestEnvironment() ? 'test-environment' : ''}`}>
+                <EnvironmentBanner />
                 <div className="flex">
                     <Sidebar isLoggedIn={isLoggedIn} onLogout={handleLogout} />
 
