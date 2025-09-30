@@ -87,21 +87,26 @@ const Landing: React.FC = () => {
 
         try {
             setFeedbackLoading(true);
-            const response = await apiClient.post('/api/v1/feedback', {
+            await apiClient.post('/api/v1/feedback', {
                 message: trimmedFeedback,
                 type: 'general'
             });
 
             toast.success('Thank you for your feedback! We appreciate your input.');
             setFeedback('');
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error submitting feedback:', error);
 
             // Handle specific error cases
-            if (error.response?.status === 429) {
-                toast.error('Rate limit exceeded. Please wait before submitting more feedback.');
-            } else if (error.response?.status === 400) {
-                toast.error(error.response.data?.error || 'Invalid feedback. Please check your message and try again.');
+            if (error && typeof error === 'object' && 'response' in error) {
+                const axiosError = error as { response?: { status?: number; data?: { error?: string } } };
+                if (axiosError.response?.status === 429) {
+                    toast.error('Rate limit exceeded. Please wait before submitting more feedback.');
+                } else if (axiosError.response?.status === 400) {
+                    toast.error(axiosError.response.data?.error || 'Invalid feedback. Please check your message and try again.');
+                } else {
+                    toast.error('Failed to submit feedback. Please try again.');
+                }
             } else {
                 toast.error('Failed to submit feedback. Please try again.');
             }
