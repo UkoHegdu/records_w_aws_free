@@ -1,11 +1,8 @@
-// lambda/checkJobStatus.js
-const { DynamoDBClient, GetItemCommand } = require('@aws-sdk/client-dynamodb');
-const { unmarshall } = require('@aws-sdk/util-dynamodb');
-
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+// lambda/checkJobStatus.js (backend: in-memory only; no AWS)
+const mapSearchJobStore = require('../mapSearchJobStore');
 
 exports.handler = async (event, context) => {
-    console.log('🔍 checkJobStatus Lambda triggered!', event);
+    console.log('🔍 checkJobStatus triggered!', event);
 
     const { jobId } = event.pathParameters || {};
 
@@ -23,15 +20,8 @@ exports.handler = async (event, context) => {
     }
 
     try {
-        // Get job status from DynamoDB
-        const result = await dynamoClient.send(new GetItemCommand({
-            TableName: process.env.MAP_SEARCH_RESULTS_TABLE_NAME,
-            Key: {
-                job_id: { S: jobId }
-            }
-        }));
-
-        if (!result.Item) {
+        const job = await mapSearchJobStore.get(jobId);
+        if (!job) {
             return {
                 statusCode: 404,
                 headers: {
@@ -44,9 +34,6 @@ exports.handler = async (event, context) => {
             };
         }
 
-        const job = unmarshall(result.Item);
-
-        // Return job status and results if completed
         const response = {
             jobId: job.job_id,
             status: job.status,
@@ -55,12 +42,8 @@ exports.handler = async (event, context) => {
             created_at: job.created_at,
             updated_at: job.updated_at
         };
-
-        if (job.status === 'completed' && job.result) {
-            response.result = job.result;
-        } else if (job.status === 'failed' && job.error_message) {
-            response.error = job.error_message;
-        }
+        if (job.status === 'completed' && job.result) response.result = job.result;
+        if (job.status === 'failed' && job.error_message) response.error = job.error_message;
 
         return {
             statusCode: 200,
@@ -72,7 +55,6 @@ exports.handler = async (event, context) => {
             },
             body: JSON.stringify(response)
         };
-
     } catch (error) {
         console.error('Error checking job status:', error);
         return {

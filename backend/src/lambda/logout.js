@@ -1,9 +1,6 @@
 // lambda/logout.js
 const jwt = require('jsonwebtoken');
-const { DynamoDBClient, DeleteItemCommand } = require('@aws-sdk/client-dynamodb');
-const { marshall } = require('@aws-sdk/util-dynamodb');
-
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const { deleteSession } = require('../sessionStore');
 
 exports.handler = async (event, context) => {
     console.log('🚪 Logout Lambda triggered!', event);
@@ -46,15 +43,8 @@ exports.handler = async (event, context) => {
         const decoded = jwt.verify(refresh_token, process.env.JWT_SECRET);
         console.log('✅ Refresh token verified for logout, session:', decoded.session_id);
 
-        // Delete session from DynamoDB
-        const deleteSessionParams = {
-            TableName: process.env.USER_SESSIONS_TABLE_NAME,
-            Key: marshall({
-                session_id: decoded.session_id
-            })
-        };
-
-        await dynamoClient.send(new DeleteItemCommand(deleteSessionParams));
+        // Delete session from memory (backend has no AWS)
+        deleteSession(decoded.session_id);
 
         console.log('✅ Session deleted successfully:', decoded.session_id);
 

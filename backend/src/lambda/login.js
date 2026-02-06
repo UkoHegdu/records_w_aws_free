@@ -2,12 +2,9 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Client } = require('pg');
-const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
-const { marshall } = require('@aws-sdk/util-dynamodb');
 const { v4: uuidv4 } = require('uuid');
 const { validateAndSanitizeInput, checkRateLimit } = require('./securityUtils');
-
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const { saveSession } = require('../sessionStore');
 
 // Database connection using Neon
 const getDbConnection = () => {
@@ -144,7 +141,7 @@ exports.handler = async (event, context) => {
             { expiresIn: '7d' }
         );
 
-        // Store session in DynamoDB
+        // Store session in memory (backend has no AWS; see DifferencesWithAWS.md)
         const sessionData = {
             session_id: sessionId,
             user_id: userId,
@@ -152,19 +149,14 @@ exports.handler = async (event, context) => {
             access_token: accessToken,
             refresh_token: refreshToken,
             created_at: now.toISOString(),
-            expires_at: Math.floor(expiresAt.getTime() / 1000), // Unix timestamp for TTL
+            expires_at: Math.floor(expiresAt.getTime() / 1000),
             last_accessed: now.toISOString(),
             user_agent: event.headers['User-Agent'] || 'Unknown',
             ip_address: event.requestContext?.identity?.sourceIp || 'Unknown'
         };
 
-        const putSessionParams = {
-            TableName: process.env.USER_SESSIONS_TABLE_NAME,
-            Item: marshall(sessionData)
-        };
-
-        await dynamoClient.send(new PutItemCommand(putSessionParams));
-        console.log('✅ Session created in DynamoDB:', sessionId);
+        saveSession(sessionData);
+        console.log('✅ Session created (in-memory):', sessionId);
 
         return {
             statusCode: 200,

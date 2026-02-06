@@ -1,11 +1,8 @@
-// lambda/mapSearchBackground.js
+// lambda/mapSearchBackground.js (backend: in-memory only; no AWS)
 const axios = require('axios');
-const { DynamoDBClient, PutItemCommand, UpdateItemCommand } = require('@aws-sdk/client-dynamodb');
-const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
 const { translateAccountNames } = require('./accountNames');
 const apiClient = require('./shared/apiClient');
-
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const mapSearchJobStore = require('../mapSearchJobStore');
 
 // Helper function to sleep
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -169,38 +166,9 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
     return mapsAndLeaderboards;
 };
 
-// Update job status in DynamoDB
+// Update job status (Postgres or in-memory; backend has no AWS)
 const updateJobStatus = async (jobId, status, result = null, error = null) => {
-    const expressionAttributeValues = {
-        ':status': status,
-        ':updated_at': Date.now()
-    };
-
-    let updateExpression = 'SET #status = :status, updated_at = :updated_at';
-    const expressionAttributeNames = {
-        '#status': 'status'
-    };
-
-    if (result) {
-        updateExpression += ', #result = :result';
-        expressionAttributeNames['#result'] = 'result';
-        expressionAttributeValues[':result'] = result;
-    }
-
-    if (error) {
-        updateExpression += ', error_message = :error';
-        expressionAttributeValues[':error'] = error;
-    }
-
-    const updateParams = {
-        TableName: process.env.MAP_SEARCH_RESULTS_TABLE_NAME,
-        Key: marshall({ job_id: jobId }),
-        UpdateExpression: updateExpression,
-        ExpressionAttributeNames: expressionAttributeNames,
-        ExpressionAttributeValues: marshall(expressionAttributeValues)
-    };
-
-    await dynamoClient.send(new UpdateItemCommand(updateParams));
+    await mapSearchJobStore.setStatus(jobId, status, result, error);
 };
 
 // Check and initialize position data for inaccurate mode users

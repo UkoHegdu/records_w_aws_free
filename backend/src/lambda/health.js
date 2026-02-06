@@ -7,12 +7,11 @@ exports.handler = async (event, context) => {
             status: 'OK',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
-            environment: process.env.AWS_REGION || 'unknown',
+            environment: process.env.NODE_ENV || 'development',
             version: '1.0.0',
             services: {
-                lambda: 'healthy',
-                dynamodb: 'connected',
-                parameter_store: 'accessible'
+                backend: 'healthy',
+                postgres: process.env.NEON_DB_CONNECTION_STRING ? 'configured' : 'not_configured'
             }
         };
 

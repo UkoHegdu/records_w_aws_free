@@ -1,62 +1,10 @@
-// lambda/schedulerProcessor.js - Processes queued user checks in two phases with caching
+// lambda/schedulerProcessor.js - Backend: Postgres daily_emails + map_leaderboard_cache (no DynamoDB/SQS)
 const { fetchMapsAndLeaderboards } = require('./mapSearch');
 const { translateAccountNames } = require('./accountNames');
-const { DynamoDBClient, PutItemCommand, GetItemCommand } = require('@aws-sdk/client-dynamodb');
-const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
+const dailyEmailStore = require('../dailyEmailStore');
 
-// Configure DynamoDB client
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-
-// Cache functions for map leaderboard data
-const cacheMapLeaderboard = async (mapId, leaderboardData) => {
-    const cacheKey = `map_${mapId}_${new Date().toISOString().split('T')[0]}`;
-    const ttl = Math.floor(Date.now() / 1000) + (24 * 60 * 60); // 24 hours
-
-    const item = {
-        cache_key: cacheKey,
-        map_id: mapId,
-        leaderboard_data: leaderboardData,
-        cached_at: Date.now(),
-        ttl: ttl
-    };
-
-    const params = {
-        TableName: process.env.MAP_LEADERBOARD_CACHE_TABLE_NAME,
-        Item: marshall(item)
-    };
-
-    try {
-        await dynamoClient.send(new PutItemCommand(params));
-        console.log(`✅ Cached leaderboard data for map ${mapId}`);
-        return true;
-    } catch (error) {
-        console.error(`❌ Error caching leaderboard data for map ${mapId}:`, error.message);
-        return false;
-    }
-};
-
-const getCachedMapLeaderboard = async (mapId) => {
-    const cacheKey = `map_${mapId}_${new Date().toISOString().split('T')[0]}`;
-
-    const params = {
-        TableName: process.env.MAP_LEADERBOARD_CACHE_TABLE_NAME,
-        Key: marshall({ cache_key: cacheKey })
-    };
-
-    try {
-        const result = await dynamoClient.send(new GetItemCommand(params));
-        if (result.Item) {
-            const item = unmarshall(result.Item);
-            console.log(`✅ Retrieved cached leaderboard data for map ${mapId}`);
-            return item.leaderboard_data;
-        }
-        console.log(`ℹ️ No cached data found for map ${mapId}`);
-        return null;
-    } catch (error) {
-        console.error(`❌ Error retrieving cached data for map ${mapId}:`, error.message);
-        return null;
-    }
-};
+const cacheMapLeaderboard = dailyEmailStore.cacheMapLeaderboard;
+const getCachedMapLeaderboard = dailyEmailStore.getCachedMapLeaderboard;
 
 // Enhanced retry configuration for scheduler
 const RETRY_CONFIG = {
@@ -167,33 +115,12 @@ async function formatNewRecords(records) {
     return formatted.trim();
 }
 
-// Save email body to DynamoDB for later sending with retry logic
-async function saveEmailBodyToDynamoDB(userId, username, email, mapperContent) {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-    const ttl = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days from now
-
-    const item = {
-        user_id: userId,
-        date: today,
-        username: username,
-        email: email,
-        mapper_content: mapperContent || '',
-        driver_content: '', // Will be filled by driver notification processor
-        ttl: ttl
-    };
-
-    const params = {
-        TableName: process.env.DAILY_EMAILS_TABLE_NAME,
-        Item: marshall(item)
-    };
-
+async function saveDailyEmail(username, email, mapperContent) {
     await withRetry(
-        () => dynamoClient.send(new PutItemCommand(params)),
-        `DynamoDB save for user ${username}`
+        () => dailyEmailStore.saveDailyEmail(username, email, mapperContent),
+        `Postgres daily_emails save for user ${username}`
     );
-
-    console.log(`✅ Email body saved to DynamoDB for user ${username}`);
-    return true;
+    console.log(`✅ Email body saved to daily_emails for user ${username}`);
 }
 
 // Process map alert check (Phase 1) with caching and alert type support
@@ -292,8 +219,7 @@ const processMapAlertCheck = async (username, email) => {
 
         await client.end();
 
-        // Save email body to DynamoDB (will be sent later by email sender)
-        await saveEmailBodyToDynamoDB(username, username, email, mapperContent);
+        await saveDailyEmail(username, email, mapperContent);
 
         // Log notification history
         await logNotificationHistory(username, 'mapper_alert', newRecords.length > 0 ? 'sent' : 'no_new_times',
@@ -581,54 +507,9 @@ const formatDriverNotification = (result, leaderboardData) => {
     return content;
 };
 
-// Update email content with driver notifications (creates row if missing for driver-only users)
 const updateEmailContentWithDriverNotifications = async (username, email, driverContent) => {
-    const today = new Date().toISOString().split('T')[0];
-    const ttl = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60);
-
-    const getParams = {
-        TableName: process.env.DAILY_EMAILS_TABLE_NAME,
-        Key: marshall({
-            user_id: username,
-            date: today
-        })
-    };
-
-    try {
-        const { GetItemCommand } = require('@aws-sdk/client-dynamodb');
-        const existingItem = await dynamoClient.send(new GetItemCommand(getParams));
-
-        if (existingItem.Item) {
-            const item = unmarshall(existingItem.Item);
-            await dynamoClient.send(new PutItemCommand({
-                TableName: process.env.DAILY_EMAILS_TABLE_NAME,
-                Item: marshall({
-                    ...item,
-                    driver_content: driverContent,
-                    updated_at: Date.now()
-                })
-            }));
-            console.log(`✅ Updated email content with driver notifications for ${username}`);
-        } else {
-            // Driver-only user: no Phase 1 row; create so emailSender can send
-            await dynamoClient.send(new PutItemCommand({
-                TableName: process.env.DAILY_EMAILS_TABLE_NAME,
-                Item: marshall({
-                    user_id: username,
-                    date: today,
-                    username: username,
-                    email: email,
-                    mapper_content: '',
-                    driver_content: driverContent,
-                    ttl: ttl,
-                    updated_at: Date.now()
-                })
-            }));
-            console.log(`✅ Created daily email row with driver notifications for ${username}`);
-        }
-    } catch (error) {
-        console.error(`❌ Error updating email content for ${username}:`, error.message);
-    }
+    await dailyEmailStore.updateDriverContent(username, email, driverContent);
+    console.log(`✅ Updated daily_emails with driver content for ${username}`);
 };
 
 exports.handler = async (event) => {
@@ -736,6 +617,9 @@ exports.handler = async (event) => {
         })
     };
 };
+
+exports.processMapAlertCheck = processMapAlertCheck;
+exports.processDriverNotificationCheck = processDriverNotificationCheck;
 
 // Log notification history to database
 const logNotificationHistory = async (username, notificationType, status, message, recordsFound) => {

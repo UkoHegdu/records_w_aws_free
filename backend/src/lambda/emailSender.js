@@ -1,143 +1,69 @@
-// lambda/emailSender.js - Final step to send combined emails
-const { DynamoDBClient, ScanCommand } = require('@aws-sdk/client-dynamodb');
-const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
-const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
+// lambda/emailSender.js - Backend: Postgres daily_emails + SMTP (no DynamoDB/SES)
+const dailyEmailStore = require('../dailyEmailStore');
+const { sendEmail } = require('../email/sendEmail');
 
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-const sesClient = new SESClient({ region: process.env.AWS_REGION });
+async function runSendPhaseForToday() {
+  const today = dailyEmailStore.todayStr();
+  const rows = await dailyEmailStore.getDailyEmailsForDate(today);
+  let emailsSent = 0;
+  let emailsSkipped = 0;
+
+  for (const row of rows) {
+    try {
+      const hasMapper = row.mapper_content && row.mapper_content.trim().length > 0;
+      const hasDriver = row.driver_content && row.driver_content.trim().length > 0;
+
+      if (!hasMapper && !hasDriver) {
+        emailsSkipped++;
+        continue;
+      }
+
+      let subject = '';
+      let emailText = '';
+
+      if (hasMapper && hasDriver) {
+        subject = `Daily Update: New Records & Position Changes`;
+        emailText = `Hello ${row.username}!\n\nHere's your daily Trackmania update:\n\n`;
+        emailText += `🗺️ NEW RECORDS ON YOUR MAPS:\n${row.mapper_content}\n\n`;
+        emailText += `🏎️ POSITION CHANGES:\n${row.driver_content}\n\n`;
+      } else if (hasMapper) {
+        subject = `New times in ${row.username}'s maps`;
+        emailText = `New times have been driven on your map(s):\n\n${row.mapper_content}`;
+      } else {
+        subject = `Position Changes on Tracked Maps`;
+        emailText = `Hello ${row.username}!\n\nHere are the position changes on maps you're tracking:\n\n${row.driver_content}`;
+      }
+
+      await sendEmail(row.email, subject, emailText);
+      await dailyEmailStore.setDailyEmailStatus(row.username, today, 'sent');
+      emailsSent++;
+    } catch (error) {
+      console.error(`❌ Error sending email to ${row.username}:`, error.message);
+    }
+  }
+
+  return { emailsSent, emailsSkipped, totalProcessed: rows.length };
+}
+
+exports.runSendPhaseForToday = runSendPhaseForToday;
 
 exports.handler = async (event, context) => {
-    console.log('📧 Email Sender Lambda triggered!', event);
-
-    try {
-        // Get all email bodies from DynamoDB for today
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-        console.log(`📅 Processing emails for date: ${today}`);
-
-        const scanParams = {
-            TableName: process.env.DAILY_EMAILS_TABLE_NAME,
-            FilterExpression: '#date = :date',
-            ExpressionAttributeNames: {
-                '#date': 'date'
-            },
-            ExpressionAttributeValues: {
-                ':date': { S: today }
-            }
-        };
-
-        const result = await dynamoClient.send(new ScanCommand(scanParams));
-        const emailBodies = result.Items.map(item => unmarshall(item));
-
-        console.log(`📬 Found ${emailBodies.length} email bodies to process`);
-
-        let emailsSent = 0;
-        let emailsSkipped = 0;
-
-        for (const emailBody of emailBodies) {
-            try {
-                // Check if there's any content to send
-                const hasMapperContent = emailBody.mapper_content && emailBody.mapper_content.trim().length > 0;
-                const hasDriverContent = emailBody.driver_content && emailBody.driver_content.trim().length > 0;
-
-                if (!hasMapperContent && !hasDriverContent) {
-                    console.log(`⏭️ Skipping email for user ${emailBody.user_id} - no content to send`);
-                    emailsSkipped++;
-                    continue;
-                }
-
-                // Build the email content
-                let emailText = '';
-                let subject = '';
-
-                if (hasMapperContent && hasDriverContent) {
-                    // Combined email
-                    subject = `Daily Update: New Records & Position Changes`;
-                    emailText = `Hello ${emailBody.username}!\n\n`;
-                    emailText += `Here's your daily Trackmania update:\n\n`;
-
-                    if (hasMapperContent) {
-                        emailText += `🗺️ NEW RECORDS ON YOUR MAPS:\n`;
-                        emailText += `${emailBody.mapper_content}\n\n`;
-                    }
-
-                    if (hasDriverContent) {
-                        emailText += `🏎️ POSITION CHANGES:\n`;
-                        emailText += `${emailBody.driver_content}\n\n`;
-                    }
-                } else if (hasMapperContent) {
-                    // Mapper alerts only
-                    subject = `New times in ${emailBody.username}'s maps`;
-                    emailText = `New times have been driven on your map(s):\n\n${emailBody.mapper_content}`;
-                } else if (hasDriverContent) {
-                    // Driver notifications only
-                    subject = `Position Changes on Tracked Maps`;
-                    emailText = `Hello ${emailBody.username}!\n\n`;
-                    emailText += `Here are the position changes on maps you're tracking:\n\n${emailBody.driver_content}`;
-                }
-
-                // Send the email
-                await sendEmail(emailBody.email, subject, emailText);
-                console.log(`✅ Email sent to ${emailBody.email}`);
-                emailsSent++;
-
-            } catch (error) {
-                console.error(`❌ Error sending email to user ${emailBody.user_id}:`, error.message);
-                // Continue with other emails even if one fails
-            }
-        }
-
-        console.log(`📊 Email Summary: ${emailsSent} sent, ${emailsSkipped} skipped`);
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: 'Email sending completed',
-                emailsSent: emailsSent,
-                emailsSkipped: emailsSkipped,
-                totalProcessed: emailBodies.length
-            })
-        };
-
-    } catch (error) {
-        console.error('❌ Email sender error:', error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                error: 'Email sending failed',
-                details: error.message
-            })
-        };
-    }
-};
-
-// Send email using AWS SES
-async function sendEmail(to, subject, text) {
-    const params = {
-        Source: process.env.SES_FROM_EMAIL,
-        Destination: {
-            ToAddresses: [to]
-        },
-        Message: {
-            Subject: {
-                Data: subject,
-                Charset: 'UTF-8'
-            },
-            Body: {
-                Text: {
-                    Data: text,
-                    Charset: 'UTF-8'
-                }
-            }
-        }
+  console.log('📧 Email Sender (backend: Postgres + SMTP)', event);
+  try {
+    const summary = await runSendPhaseForToday();
+    console.log(`📊 Email Summary: ${summary.emailsSent} sent, ${summary.emailsSkipped} skipped`);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: 'Email sending completed',
+        ...summary,
+      }),
     };
-
-    try {
-        const command = new SendEmailCommand(params);
-        const result = await sesClient.send(command);
-        console.log(`✅ Email sent successfully to ${to}, MessageId: ${result.MessageId}`);
-        return result;
-    } catch (error) {
-        console.error(`❌ Failed to send email to ${to}:`, error.message);
-        throw error;
-    }
-}
+  } catch (error) {
+    console.error('❌ Email sender error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Email sending failed', details: error.message }),
+    };
+  }
+};

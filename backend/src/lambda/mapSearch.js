@@ -119,13 +119,9 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
 // Export the function for use by scheduler
 exports.fetchMapsAndLeaderboards = fetchMapsAndLeaderboards;
 
-const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
-const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
-const { marshall } = require('@aws-sdk/util-dynamodb');
 const { v4: uuidv4 } = require('uuid');
-
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-const sqsClient = new SQSClient({ region: process.env.AWS_REGION });
+const mapSearchJobStore = require('../mapSearchJobStore');
+const mapSearchBackground = require('./mapSearchBackground');
 
 // Rate limiting: Track user requests per minute
 const userRequestCounts = new Map();
@@ -197,53 +193,19 @@ exports.handler = async (event, context) => {
     console.log('✅ Username validation passed, starting job creation...');
 
     try {
-        // Generate unique job ID
         const jobId = uuidv4();
         console.log('🆔 Generated job ID:', jobId);
 
-        // Store job in DynamoDB with pending status
-        const jobItem = {
-            job_id: jobId,
-            username: username,
-            period: period || '1d',
-            status: 'pending',
-            created_at: Date.now(),
-            ttl: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours TTL
-        };
-        console.log('💾 Job item to store:', jobItem);
-        console.log('🗄️ Table name:', process.env.MAP_SEARCH_RESULTS_TABLE_NAME);
+        // Postgres or in-memory store + in-process background (backend has no AWS)
+        await mapSearchJobStore.create(jobId, username, period || '1d');
+        setImmediate(() => {
+            mapSearchBackground.handler({
+                Records: [{ body: JSON.stringify({ jobId, username, period: period || '1d' }) }]
+            }).catch(err => console.error('Map search background error:', err));
+        });
 
-        await dynamoClient.send(new PutItemCommand({
-            TableName: process.env.MAP_SEARCH_RESULTS_TABLE_NAME,
-            Item: marshall(jobItem)
-        }));
-        console.log('✅ Job stored in DynamoDB successfully');
-
-        // Send job to SQS queue
-        console.log('📤 Sending job to SQS queue:', process.env.MAP_SEARCH_QUEUE_URL);
-        await sqsClient.send(new SendMessageCommand({
-            QueueUrl: process.env.MAP_SEARCH_QUEUE_URL,
-            MessageBody: JSON.stringify({
-                jobId: jobId,
-                username: username,
-                period: period || '1d'
-            }),
-            MessageAttributes: {
-                jobId: {
-                    DataType: 'String',
-                    StringValue: jobId
-                },
-                username: {
-                    DataType: 'String',
-                    StringValue: username
-                }
-            }
-        }));
-        console.log('✅ Job sent to SQS queue successfully');
-
-        // Return job ID immediately
         const response = {
-            statusCode: 202, // Accepted
+            statusCode: 202,
             headers: {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*',
@@ -251,10 +213,10 @@ exports.handler = async (event, context) => {
                 'Access-Control-Allow-Methods': 'GET,OPTIONS'
             },
             body: JSON.stringify({
-                jobId: jobId,
+                jobId,
                 status: 'pending',
                 message: 'Map search queued. Use the job ID to check status.',
-                estimatedWaitTime: '2-5 minutes'
+                estimatedWaitTime: '1–3 minutes (in-process)'
             })
         };
         console.log('📤 Returning response:', response);

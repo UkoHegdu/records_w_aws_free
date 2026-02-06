@@ -11,6 +11,7 @@ const admin = require('./routes/admin');
 const notificationHistory = require('./routes/notificationHistory');
 const feedback = require('./routes/feedback');
 const test = require('./routes/test');
+const cron = require('./routes/cron');
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/v1/admin', admin);
 app.use('/api/v1', notificationHistory);
 app.use('/api/v1', feedback);
 app.use('/api/v1', test);
+app.use('/api/v1', cron);
 
 // 404
 app.use((req, res) => {

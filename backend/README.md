@@ -2,6 +2,8 @@
 
 Single Node/Express server that exposes the same REST API as the API Gateway + Lambda setup. All handler code lives in `src/lambda/` (copied from `terraform/lambda/`) so the backend is self-contained.
 
+**Backend vs AWS:** Sessions and map-search jobs use **in-memory** storage in this backend (no DynamoDB/SQS for those). See [DifferencesWithAWS.md](DifferencesWithAWS.md) for details.
+
 ## Run locally
 
 1. **Install dependencies**
@@ -13,19 +15,13 @@ Single Node/Express server that exposes the same REST API as the API Gateway + L
 
 2. **Environment**
 
-   Create a `.env` in `backend/` (or set env vars) with the same variables the Lambdas use. At minimum:
+   Create a `.env` in `backend/` (or set env vars). At minimum:
 
-   - `NEON_DB_CONNECTION_STRING`
+   - `NEON_DB_CONNECTION_STRING` (Postgres; run **`backend/sql/init.sql`** once on Neon to create all tables)
    - `JWT_SECRET`
-   - `USER_SESSIONS_TABLE_NAME` (DynamoDB table name – still used until you migrate to Neon)
-   - `DYNAMODB_TABLE_NAME` (auth tokens table)
-   - `MAP_SEARCH_RESULTS_TABLE_NAME`
-   - `MAP_SEARCH_QUEUE_URL`
    - `LEAD_API`, `AUTH_API_URL`, `AUTHORIZATION`, `USER_AGENT`
    - `OCLIENT_ID`, `OCLIENT_SECRET`
-   - `AWS_REGION` (for DynamoDB/SQS if you still use them)
-
-   See `terraform/main.tf` and Lambda env blocks for the full list.
+   - For daily cron: `CRON_SECRET`; for email: `EMAIL_USER`, `EMAIL_PASS`
 
 3. **Start**
 
@@ -51,37 +47,23 @@ Single Node/Express server that exposes the same REST API as the API Gateway + L
 - `GET/POST /api/v1/feedback`
 - `GET/POST /api/v1/test`, `GET/POST /api/v1/test-advanced`
 
-## Keeping serverless and backend in sync
+## Backend vs terraform
 
-Handler code exists in two places: `terraform/lambda/` (AWS) and `backend/src/lambda/` (this backend). You will change both over time. To avoid drift:
-
-1. **Pick a single source of truth** for each change:
-   - **AWS-first:** Edit in `terraform/lambda/`. When you’re ready to update production, run the sync script (below) so `backend/src/lambda/` gets the same files.
-   - **Backend-first:** Edit in `backend/src/lambda/`. Before you deploy to AWS, run the sync script in reverse (backend → terraform) so Lambda gets your changes.
-
-2. **Sync script (terraform → backend)**  
-   From repo root:
-   ```bash
-   node backend/scripts/sync-lambda-from-terraform.js
-   ```
-   This copies handler and shared files from `terraform/lambda/` into `backend/src/lambda/`, skipping tests and manual-only files. Run it after you change `terraform/lambda/` and want the backend to match.
-
-3. **Sync script (backend → terraform)**  
-   From repo root:
-   ```bash
-   node backend/scripts/sync-lambda-to-terraform.js
-   ```
-   Use this when you’ve edited `backend/src/lambda/` and want to deploy the same code to AWS.
-
-4. **If you only change one side sometimes:**  
-   Keep a short note (e.g. in a `SYNC` file or commit message) when you’ve updated only one copy, so you remember to run the appropriate sync before deploying the other.
+Backend is standalone (no AWS). Handler code in `backend/src/lambda/` is for comparison with `terraform/lambda/` only; nothing is synced. See [DifferencesWithAWS.md](DifferencesWithAWS.md).
 
 ## Copying to another branch/repo
 
 Copy the whole `backend/` folder; it already contains all handler code in `src/lambda/`. Install deps and set env as above.
 
-## Next steps (Hetzner / non-AWS)
+## Daily emails (Postgres + cron) and SMTP
 
-- Replace DynamoDB with Neon tables (sessions, tokens, map_search_jobs, cache, daily_emails).
-- Replace SQS with a Postgres-backed job queue + a small worker (cron or in-process).
-- Run daily scheduler and driver notifications via cron calling the same logic as `schedulerProcessor` and `driverNotificationProcessor`.
+Backend already runs daily emails and driver notifications via Postgres + one cron endpoint (no SQS/DynamoDB). See [DAILY_EMAILS_POSTGRES_CRON.md](DAILY_EMAILS_POSTGRES_CRON.md).
+
+**What you need:**
+
+1. Run `backend/sql/daily_emails.sql` on Neon.
+2. Set **CRON_SECRET** (e.g. a random string). Cron calls must send it: `Authorization: Bearer <CRON_SECRET>` or `?secret=<CRON_SECRET>`.
+3. **Email (Gmail):** Set in `.env`: `EMAIL_USER` and `EMAIL_PASS` (Gmail App Password if 2FA is on).
+4. Call `POST /api/v1/cron/daily` once per day (system cron or cron-job.org) with the secret.
+
+Replacing SES with SMTP is done: `backend/src/email/sendEmail.js` uses nodemailer; `emailSender.js` calls it.

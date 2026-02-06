@@ -1,10 +1,6 @@
 // lambda/refreshToken.js
 const jwt = require('jsonwebtoken');
-const { DynamoDBClient, GetItemCommand, UpdateItemCommand } = require('@aws-sdk/client-dynamodb');
-const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
-const { v4: uuidv4 } = require('uuid');
-
-const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+const { getSession, updateSession } = require('../sessionStore');
 
 exports.handler = async (event, context) => {
     console.log('🔄 Refresh Token Lambda triggered!', event);
@@ -47,18 +43,11 @@ exports.handler = async (event, context) => {
         const decoded = jwt.verify(refresh_token, process.env.JWT_SECRET);
         console.log('✅ Refresh token verified for user:', decoded.user_id);
 
-        // Get session from DynamoDB
-        const getSessionParams = {
-            TableName: process.env.USER_SESSIONS_TABLE_NAME,
-            Key: marshall({
-                session_id: decoded.session_id
-            })
-        };
+        // Get session from memory (backend has no AWS)
+        const session = getSession(decoded.session_id);
 
-        const sessionResult = await dynamoClient.send(new GetItemCommand(getSessionParams));
-
-        if (!sessionResult.Item) {
-            console.log('❌ Session not found in DynamoDB');
+        if (!session) {
+            console.log('❌ Session not found');
             return {
                 statusCode: 401,
                 headers: {
@@ -71,7 +60,6 @@ exports.handler = async (event, context) => {
             };
         }
 
-        const session = unmarshall(sessionResult.Item);
         console.log('✅ Session found:', session.session_id);
 
         // Check if session is still valid
@@ -111,20 +99,11 @@ exports.handler = async (event, context) => {
             { expiresIn: '7d' }
         );
 
-        // Update session with new refresh token and last accessed time
-        const updateSessionParams = {
-            TableName: process.env.USER_SESSIONS_TABLE_NAME,
-            Key: marshall({
-                session_id: session.session_id
-            }),
-            UpdateExpression: 'SET refresh_token = :refresh_token, last_accessed = :last_accessed',
-            ExpressionAttributeValues: marshall({
-                ':refresh_token': newRefreshToken,
-                ':last_accessed': new Date().toISOString()
-            })
-        };
-
-        await dynamoClient.send(new UpdateItemCommand(updateSessionParams));
+        // Update session in memory (backend has no AWS)
+        updateSession(session.session_id, {
+            refresh_token: newRefreshToken,
+            last_accessed: new Date().toISOString()
+        });
 
         console.log('✅ New tokens generated for user:', session.user_id);
 
