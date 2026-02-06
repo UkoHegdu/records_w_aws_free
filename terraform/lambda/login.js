@@ -59,30 +59,35 @@ exports.handler = async (event, context) => {
         };
     }
 
-    // Validate and sanitize inputs
-    // The frontend sends username as email field, so we need to handle both cases
+    // Validate and sanitize inputs (stricter: format checks via securityUtils)
+    // Frontend may send email or username; validate by format
     const emailOrUsername = body.email || body.username;
-    const emailValidation = validateAndSanitizeInput(emailOrUsername, 'string', { required: true });
+    const isEmail = typeof emailOrUsername === 'string' && emailOrUsername.includes('@');
+    const identifierValidation = validateAndSanitizeInput(
+        emailOrUsername,
+        isEmail ? 'email' : 'username',
+        { required: true }
+    );
 
-    if (!emailValidation.isValid) {
+    if (!identifierValidation.isValid) {
         return {
             statusCode: 400,
             headers: headers,
-            body: JSON.stringify({ msg: emailValidation.error })
+            body: JSON.stringify({ msg: identifierValidation.error })
         };
     }
 
-    // For login, we don't validate password format - just check if it exists
-    if (!body.password || typeof body.password !== 'string') {
+    const passwordValidation = validateAndSanitizeInput(body.password, 'password', { required: true });
+    if (!passwordValidation.isValid) {
         return {
             statusCode: 400,
             headers: headers,
-            body: JSON.stringify({ msg: 'Password is required' })
+            body: JSON.stringify({ msg: passwordValidation.error })
         };
     }
 
-    const { sanitized: emailOrUsernameSanitized } = emailValidation;
-    const password = body.password; // Use password as-is for login
+    const { sanitized: emailOrUsernameSanitized } = identifierValidation;
+    const password = body.password; // Use raw password for bcrypt.compare
 
     const client = getDbConnection();
 

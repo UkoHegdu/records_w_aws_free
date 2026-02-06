@@ -119,9 +119,7 @@ exports.handler = async (event, context) => {
             statusCode: 500,
             headers: headers,
             body: JSON.stringify({
-                error: 'Internal server error',
-                message: error.message,
-                details: error.response?.data || error.stack
+                error: 'Internal server error'
             })
         };
     }

@@ -53,10 +53,13 @@ create table driver_notifications (
    created_at timestamp default now(),
    updated_at timestamp default now(),
    map_name   VARCHAR(500) not null,
-   personal_best integer,
+   personal_best integer not null,
    status     VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
    last_checked timestamp default now(),
-   is_active  boolean DEFAULT TRUE
+   is_active  boolean DEFAULT TRUE,
+
+   -- Ensure one notification per user per map
+   UNIQUE(user_id, map_uid)
 );
 
 -- Map positions table for inaccurate mode

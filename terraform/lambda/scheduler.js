@@ -28,12 +28,8 @@ const queueUserChecks = async () => {
         const { rows: alerts } = await client.query('SELECT username, email FROM alerts');
         console.log(`📧 Found ${alerts.length} alerts to process`);
 
-        if (alerts.length === 0) {
-            console.log('ℹ️ No alerts configured - no jobs to queue');
-            return;
-        }
-
-        // Phase 1: Queue map alert checks for all users
+        // Phase 1: Queue map alert checks for all users with mapper alerts
+        if (alerts.length > 0) {
         console.log('📋 Phase 1: Queuing map alert checks...');
         for (const { username, email } of alerts) {
             console.log(`📤 Queuing map alert check for ${username}...`);
@@ -71,10 +67,19 @@ const queueUserChecks = async () => {
                 // Continue with other users even if one fails
             }
         }
+        }
 
-        // Phase 2: Queue driver notification checks for all users
+        // Phase 2: Queue driver notification checks for users who have active driver notifications
+        const { rows: driverUsers } = await client.query(`
+            SELECT DISTINCT u.username, u.email
+            FROM driver_notifications dn
+            JOIN users u ON dn.user_id = u.id
+            WHERE dn.is_active = TRUE
+        `);
+        console.log(`📧 Found ${driverUsers.length} users with driver notifications`);
+
         console.log('📋 Phase 2: Queuing driver notification checks...');
-        for (const { username, email } of alerts) {
+        for (const { username, email } of driverUsers) {
             console.log(`📤 Queuing driver notification check for ${username}...`);
 
             try {

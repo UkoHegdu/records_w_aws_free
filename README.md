@@ -90,6 +90,17 @@ Fully serverless AWS application following best practices for "forever free" usa
 - **Sequential Processing:** Respects TrackMania API rate limits (2 req/sec)
 - **CSS Optimization:** Hybrid approach with utility classes and CSS for better performance
 
+## Two deployment versions
+
+The app can run in two ways:
+
+| Version | Use case | Where |
+|--------|----------|-------|
+| **Serverless (AWS)** | Experimenting with AWS, CI/CD from this repo | API Gateway + Lambda (`terraform/`), frontend on S3 + CloudFront |
+| **Unified backend** | Production on your own server (e.g. Hetzner) | Single Node/Express app in `backend/`, same API, frontend served by nginx |
+
+Handler logic lives in **two copies**: `terraform/lambda/` (used by Lambda) and `backend/src/lambda/` (used by the Express backend). See [backend/README.md](backend/README.md) for how to run the backend and how to keep both copies in sync when you change either.
+
 ## Deployment & CI/CD
 
 ### Current Status

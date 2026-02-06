@@ -1,9 +1,36 @@
-// lambda/checkDriverPositions.js - Efficient driver notification checking using position API
-const oauthApiClient = require('./shared/oauthApiClient');
+// lambda/checkDriverPositions.js - Driver notification checking using leaderboard top API
+// Uses LEAD_API (same as mapSearch and driverNotificationProcessor) for consistency and reliability
+const apiClient = require('./shared/apiClient');
 
-const BASE_URL = 'https://webservices.openplanet.dev/live';
+// Fetch leaderboard top for a map (returns array of { accountId, login, position, score } for position comparison).
+const getLeaderboardTopForMap = async (mapUid) => {
+    const baseUrl = process.env.LEAD_API;
+    if (!baseUrl) {
+        console.warn('⚠️ LEAD_API not configured, cannot fetch leaderboard');
+        return null;
+    }
+    const url = `${baseUrl}/api/token/leaderboard/group/Personal_Best/map/${mapUid}/top?onlyWorld=true&length=100`;
+    try {
+        const response = await apiClient.get(url);
+        const tops = response.data?.tops;
+        if (!tops?.[0]?.top || !Array.isArray(tops[0].top)) {
+            return null;
+        }
+        return tops[0].top.map((entry) => ({
+            accountId: entry.accountId,
+            login: entry.login,
+            position: entry.position,
+            score: entry.score >= 0 ? entry.score : null
+        }));
+    } catch (err) {
+        const status = err.response?.status;
+        const statusText = err.response?.statusText;
+        console.warn(`⚠️ Leaderboard fetch failed for map ${mapUid}:`, err.message, status ? `(${status} ${statusText})` : '');
+        return null;
+    }
+};
 
-// Check driver positions for multiple maps efficiently
+// Check driver positions for multiple maps (one leaderboard request per map).
 const checkDriverPositions = async (driverNotifications) => {
     if (!Array.isArray(driverNotifications) || driverNotifications.length === 0) {
         console.warn('⚠️ No driver notifications provided for position checking.');
@@ -12,9 +39,7 @@ const checkDriverPositions = async (driverNotifications) => {
 
     console.log(`🔍 Checking positions for ${driverNotifications.length} driver notifications`);
 
-    // Group notifications by map UID for batch processing
     const mapGroups = new Map();
-
     driverNotifications.forEach(notification => {
         const mapUid = notification.map_uid;
         if (!mapGroups.has(mapUid)) {
@@ -26,18 +51,21 @@ const checkDriverPositions = async (driverNotifications) => {
     const results = [];
     const mapUids = Array.from(mapGroups.keys());
 
-    // Process maps in batches of 50 (API limit)
-    const batchSize = 50;
-    for (let i = 0; i < mapUids.length; i += batchSize) {
-        const batch = mapUids.slice(i, i + batchSize);
-        console.log(`📦 Processing batch ${Math.floor(i / batchSize) + 1}: ${batch.length} maps`);
+    for (const mapUid of mapUids) {
+        const notifications = mapGroups.get(mapUid);
+        if (!notifications || notifications.length === 0) continue;
 
-        try {
-            const batchResults = await checkBatchPositions(batch, mapGroups);
-            results.push(...batchResults);
-        } catch (error) {
-            console.error(`❌ Error processing batch:`, error.message);
-            // Continue with other batches even if one fails
+        const positionData = await getLeaderboardTopForMap(mapUid);
+        if (!positionData || positionData.length === 0) {
+            console.warn(`⚠️ No leaderboard data for map ${mapUid}`);
+            continue;
+        }
+
+        for (const notification of notifications) {
+            const result = await checkNotificationPosition(notification, positionData);
+            if (result) {
+                results.push(result);
+            }
         }
     }
 
@@ -45,53 +73,17 @@ const checkDriverPositions = async (driverNotifications) => {
     return results;
 };
 
-// Check positions for a batch of maps
-const checkBatchPositions = async (mapUids, mapGroups) => {
-    const params = new URLSearchParams();
-    mapUids.forEach(mapUid => {
-        params.append('mapUid[]', mapUid);
-    });
-
-    const url = `${BASE_URL}/leaderboards/position?${params.toString()}`;
-    console.log(`🌐 Fetching positions for ${mapUids.length} maps`);
-
-    try {
-        const response = await oauthApiClient.get(url);
-        const positionData = response.data;
-
-        const results = [];
-
-        // Process each map's position data
-        for (const mapUid of mapUids) {
-            const mapPositionData = positionData[mapUid];
-            const notifications = mapGroups.get(mapUid);
-
-            if (!mapPositionData || !notifications) {
-                console.warn(`⚠️ No position data for map ${mapUid}`);
-                continue;
-            }
-
-            // Check each notification for this map
-            for (const notification of notifications) {
-                const result = await checkNotificationPosition(notification, mapPositionData);
-                if (result) {
-                    results.push(result);
-                }
-            }
-        }
-
-        return results;
-    } catch (error) {
-        console.error('❌ Error fetching position data:', error.message);
-        throw error;
-    }
-};
-
-// Check if a specific notification's position has changed
+// Compare stored position (DB) vs current live position (API). No time window – we detect
+// any worsening (e.g. 2→3) whenever the scheduler runs, regardless of when it last ran.
 const checkNotificationPosition = async (notification, positionData) => {
     const { user_id, map_uid, current_position, current_score } = notification;
+    const storedScore = current_score ?? notification.personal_best ?? 0;
 
-    // Find the user's current position in the position data
+    if (!notification.tm_account_id && !notification.tm_username) {
+        console.warn(`⚠️ Cannot check position for notification ${notification.id}: user has no tm_account_id or tm_username`);
+        return null;
+    }
+
     const userPosition = positionData.find(pos =>
         pos.accountId === notification.tm_account_id ||
         pos.login === notification.tm_username
@@ -102,9 +94,9 @@ const checkNotificationPosition = async (notification, positionData) => {
         return null;
     }
 
-    // Check if position has changed (improved)
     const positionImproved = userPosition.position < current_position;
-    const scoreImproved = userPosition.score < current_score;
+    const scoreImproved = userPosition.score < storedScore;
+    const positionWorsened = userPosition.position > current_position;
 
     if (positionImproved || scoreImproved) {
         console.log(`🎯 Driver ${notification.tm_username} improved on map ${map_uid}: ${current_position} → ${userPosition.position}`);
@@ -113,18 +105,40 @@ const checkNotificationPosition = async (notification, positionData) => {
             notification_id: notification.id,
             user_id: user_id,
             map_uid: map_uid,
+            map_name: notification.map_name,
             tm_username: notification.tm_username,
             tm_account_id: notification.tm_account_id,
             old_position: current_position,
             new_position: userPosition.position,
-            old_score: current_score,
+            old_score: storedScore,
             new_score: userPosition.score,
             improved: true,
-            needs_leaderboard_fetch: true // Will fetch full leaderboard if needed
+            worsened: false,
+            needs_leaderboard_fetch: true
         };
     }
 
-    return null; // No improvement
+    if (positionWorsened) {
+        console.log(`📧 Driver ${notification.tm_username} position beaten on map ${map_uid}: ${current_position} → ${userPosition.position}`);
+
+        return {
+            notification_id: notification.id,
+            user_id: user_id,
+            map_uid: map_uid,
+            map_name: notification.map_name,
+            tm_username: notification.tm_username,
+            tm_account_id: notification.tm_account_id,
+            old_position: current_position,
+            new_position: userPosition.position,
+            old_score: storedScore,
+            new_score: userPosition.score,
+            improved: false,
+            worsened: true,
+            needs_leaderboard_fetch: false
+        };
+    }
+
+    return null; // No change
 };
 
 // Export for use by schedulerProcessor

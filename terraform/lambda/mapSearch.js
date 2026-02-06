@@ -104,6 +104,7 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
 
         if (filtered.length > 0) {
             mapsAndLeaderboards.push({
+                mapId: map.MapId,
                 mapName: map.Name,
                 leaderboard: filtered
             });

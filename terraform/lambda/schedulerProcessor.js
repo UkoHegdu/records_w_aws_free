@@ -262,10 +262,8 @@ const processMapAlertCheck = async (username, email) => {
         if (finalAlertType === 'accurate') {
             // Traditional accurate mode - fetch full leaderboards
             console.log(`🎯 Processing ${username} in accurate mode`);
-            newRecords = await withRetry(
-                () => fetchMapsAndLeaderboards(username, '1d'),
-                `Map search for user ${username}`
-            );
+            // fetchMapsAndLeaderboards already has retry logic built in, no need to wrap in withRetry
+            newRecords = await fetchMapsAndLeaderboards(username, '1d');
 
             // Cache leaderboard data for each map
             for (const record of newRecords) {
@@ -472,38 +470,54 @@ const processDriverNotificationCheck = async (username, email) => {
 
         let driverContent = '';
         let notificationsProcessed = 0;
+        const improvedResults = positionResults.filter(r => r.improved);
+        const worsenedResults = positionResults.filter(r => r.worsened);
 
-        if (positionResults.length > 0) {
-            console.log(`🎯 Found ${positionResults.length} improved positions for ${username}`);
-
-            // Process each improvement
-            for (const result of positionResults) {
+        if (improvedResults.length > 0) {
+            console.log(`🎯 Found ${improvedResults.length} improved positions for ${username}`);
+            for (const result of improvedResults) {
                 if (result.needs_leaderboard_fetch) {
-                    // Check if we have cached leaderboard data
                     const cachedData = await getCachedMapLeaderboard(result.map_uid);
-
                     if (cachedData) {
                         console.log(`✅ Using cached leaderboard data for map ${result.map_uid}`);
-                        // Use cached data to generate notification content
                         driverContent += formatDriverNotification(result, cachedData);
                     } else {
-                        console.log(`🔄 Fetching fresh leaderboard data for map ${result.map_uid}`);
-                        // Fetch fresh leaderboard data (this would be the existing mapSearch logic)
-                        // For now, just log that we need to fetch
                         driverContent += `🏎️ ${result.tm_username} improved position on map ${result.map_uid}: ${result.old_position} → ${result.new_position}\n`;
                     }
-
-                    // Update the driver notification record
                     await client.query(
-                        'UPDATE driver_notifications SET current_position = $1, current_score = $2, updated_at = NOW() WHERE id = $3',
-                        [result.new_position, result.new_score, result.notification_id]
+                        'UPDATE driver_notifications SET current_position = $1, last_checked = NOW(), updated_at = NOW() WHERE id = $2',
+                        [result.new_position, result.notification_id]
                     );
-
                     notificationsProcessed++;
                 }
             }
-        } else {
-            console.log(`ℹ️ No position improvements found for ${username}`);
+        }
+
+        if (worsenedResults.length > 0) {
+            console.log(`📧 Found ${worsenedResults.length} positions beaten for ${username}`);
+            for (const result of worsenedResults) {
+                driverContent += formatDriverNotificationWorsened(result);
+                const shouldBeInactive = result.new_position > 5;
+                const newStatus = shouldBeInactive ? 'inactive' : 'active';
+                await client.query(
+                    'UPDATE driver_notifications SET current_position = $1, status = $2, last_checked = NOW(), updated_at = NOW() WHERE id = $3',
+                    [result.new_position, newStatus, result.notification_id]
+                );
+                notificationsProcessed++;
+            }
+        }
+
+        if (positionResults.length === 0) {
+            console.log(`ℹ️ No position changes found for ${username}`);
+        }
+
+        // Update last_checked for all notifications that were checked (so last verification date advances)
+        const notificationIds = driverNotifications.map(n => n.id);
+        if (notificationIds.length > 0) {
+            await client.query(
+                'UPDATE driver_notifications SET last_checked = NOW() WHERE id = ANY($1::int[])',
+                [notificationIds]
+            );
         }
 
         // Update email content in DynamoDB with driver notifications
@@ -514,7 +528,7 @@ const processDriverNotificationCheck = async (username, email) => {
         // Log notification history
         await logNotificationHistory(username, 'driver_notification',
             notificationsProcessed > 0 ? 'sent' : 'no_new_times',
-            notificationsProcessed > 0 ? `Notification sent for ${notificationsProcessed} driver improvements!` : 'No new driver notifications were sent',
+            notificationsProcessed > 0 ? `Notification: ${notificationsProcessed} driver update(s) (position improved or beaten).` : 'No new driver notifications were sent',
             notificationsProcessed);
 
         await client.end();
@@ -538,7 +552,15 @@ const processDriverNotificationCheck = async (username, email) => {
     }
 };
 
-// Format driver notification content
+// Format "someone beat you" (position worsened) notification content
+const formatDriverNotificationWorsened = (result) => {
+    const mapName = result.map_name || result.map_uid;
+    return `🏎️ Map: ${mapName}\n` +
+        `📍 Someone beat your score – position changed: #${result.old_position} → #${result.new_position}\n` +
+        `📅 Detected: ${new Date().toLocaleString()}\n\n`;
+};
+
+// Format driver notification content (position improved)
 const formatDriverNotification = (result, leaderboardData) => {
     const { tm_username, map_uid, old_position, new_position, old_score, new_score } = result;
 
@@ -559,11 +581,11 @@ const formatDriverNotification = (result, leaderboardData) => {
     return content;
 };
 
-// Update email content with driver notifications
+// Update email content with driver notifications (creates row if missing for driver-only users)
 const updateEmailContentWithDriverNotifications = async (username, email, driverContent) => {
     const today = new Date().toISOString().split('T')[0];
+    const ttl = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60);
 
-    // Get existing email content
     const getParams = {
         TableName: process.env.DAILY_EMAILS_TABLE_NAME,
         Key: marshall({
@@ -578,19 +600,31 @@ const updateEmailContentWithDriverNotifications = async (username, email, driver
 
         if (existingItem.Item) {
             const item = unmarshall(existingItem.Item);
-
-            // Update with driver content
-            const updateParams = {
+            await dynamoClient.send(new PutItemCommand({
                 TableName: process.env.DAILY_EMAILS_TABLE_NAME,
                 Item: marshall({
                     ...item,
                     driver_content: driverContent,
                     updated_at: Date.now()
                 })
-            };
-
-            await dynamoClient.send(new PutItemCommand(updateParams));
+            }));
             console.log(`✅ Updated email content with driver notifications for ${username}`);
+        } else {
+            // Driver-only user: no Phase 1 row; create so emailSender can send
+            await dynamoClient.send(new PutItemCommand({
+                TableName: process.env.DAILY_EMAILS_TABLE_NAME,
+                Item: marshall({
+                    user_id: username,
+                    date: today,
+                    username: username,
+                    email: email,
+                    mapper_content: '',
+                    driver_content: driverContent,
+                    ttl: ttl,
+                    updated_at: Date.now()
+                })
+            }));
+            console.log(`✅ Created daily email row with driver notifications for ${username}`);
         }
     } catch (error) {
         console.error(`❌ Error updating email content for ${username}:`, error.message);

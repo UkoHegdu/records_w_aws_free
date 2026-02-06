@@ -119,8 +119,8 @@ const detectXSS = (input) => {
     if (!input || typeof input !== 'string') return false;
 
     const xssPatterns = [
-        /<script[^>]*>.*?<\/script>/gi,
-        /<iframe[^>]*>.*?<\/iframe>/gi,
+        /<script[^>]*>.*?<\/script\s*>/gi,
+        /<iframe[^>]*>.*?<\/iframe\s*>/gi,
         /javascript:/gi,
         /on\w+\s*=/gi,
         /<[^>]*>/gi
