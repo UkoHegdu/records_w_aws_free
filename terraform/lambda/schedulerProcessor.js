@@ -1,5 +1,9 @@
 // lambda/schedulerProcessor.js - Processes queued user checks in two phases with caching
-const { fetchMapsAndLeaderboards } = require('./mapSearch');
+const { fetchMapsAndLeaderboards, fetchMapListOnly, getRecordsFromApi, filterRecordsByPeriod } = require('./mapSearch');
+
+const AUTO_INACCURATE_MAP_THRESHOLD = 100;
+const INACCURATE_OVERFLOW_THRESHOLD = 100;
+const INACCURATE_OVERFLOW_MESSAGE = "You got new times in more than 100 maps, ain't nobody got time to go through leaderboards for 100 maps, sorry buddy";
 const { translateAccountNames } = require('./accountNames');
 const { DynamoDBClient, PutItemCommand, GetItemCommand } = require('@aws-sdk/client-dynamodb');
 const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
@@ -196,6 +200,25 @@ async function saveEmailBodyToDynamoDB(userId, username, email, mapperContent) {
     return true;
 }
 
+const applyRecordFilterToMaps = (records, recordFilter) => {
+    const filter = (entry) => {
+        const pos = Number(entry?.position);
+        if (!Number.isFinite(pos)) return false;
+        if (recordFilter === 'top5') return pos <= 5;
+        if (recordFilter === 'wr') return pos === 1;
+        return true; // 'all'
+    };
+
+    if (!Array.isArray(records) || recordFilter === 'all') return records || [];
+
+    return records
+        .map(r => ({
+            ...r,
+            leaderboard: Array.isArray(r.leaderboard) ? r.leaderboard.filter(filter) : []
+        }))
+        .filter(r => Array.isArray(r.leaderboard) && r.leaderboard.length > 0);
+};
+
 // Process map alert check (Phase 1) with caching and alert type support
 const processMapAlertCheck = async (username, email) => {
     console.log(`🔍 Phase 1: Checking map alerts for ${username}...`);
@@ -217,15 +240,29 @@ const processMapAlertCheck = async (username, email) => {
         const client = getDbConnection();
         await client.connect();
 
-        // Get user's alert type
-        const alertQuery = `
-            SELECT a.alert_type, a.map_count
+        // Get user's alert type, id, and record_filter
+        let alertQuery = `
+            SELECT a.id, a.alert_type, a.map_count, a.record_filter
             FROM alerts a
             JOIN users u ON a.user_id = u.id
             WHERE u.username = $1
         `;
-
-        const { rows: alertRows } = await client.query(alertQuery, [username]);
+        let alertRows;
+        try {
+            ({ rows: alertRows } = await client.query(alertQuery, [username]));
+        } catch (err) {
+            if (String(err?.message || '').includes('record_filter')) {
+                alertQuery = `
+                    SELECT a.id, a.alert_type, a.map_count
+                    FROM alerts a
+                    JOIN users u ON a.user_id = u.id
+                    WHERE u.username = $1
+                `;
+                ({ rows: alertRows } = await client.query(alertQuery, [username]));
+            } else {
+                throw err;
+            }
+        }
 
         if (alertRows.length === 0) {
             console.log(`ℹ️ No alerts found for ${username}`);
@@ -233,37 +270,67 @@ const processMapAlertCheck = async (username, email) => {
             return { success: true, recordsFound: 0, phase: 1 };
         }
 
-        const { alert_type, map_count } = alertRows[0];
+        const { id: alertId, alert_type, map_count, record_filter } = alertRows[0];
+        const recordFilter = record_filter || 'top5';
         console.log(`📊 User ${username} has ${map_count} maps with ${alert_type} mode`);
 
-        // Check if map count exceeds limit and auto-switch to inaccurate mode
-        const maxMapsLimit = parseInt(process.env.MAX_MAPS_PER_USER || '200');
         let finalAlertType = alert_type;
-
-        if (alert_type === 'accurate' && map_count > maxMapsLimit) {
-            console.log(`⚠️ User ${username} has ${map_count} maps, exceeding limit of ${maxMapsLimit}. Auto-switching to inaccurate mode.`);
-
-            // Update alert type in database
-            await client.query(
-                'UPDATE alerts SET alert_type = $1 WHERE user_id = (SELECT id FROM users WHERE username = $2)',
-                ['inaccurate', username]
-            );
-
-            finalAlertType = 'inaccurate';
-
-            // Log this change
-            await logNotificationHistory(username, 'mapper_alert', 'technical_error',
-                `Auto-switched to inaccurate mode due to ${map_count} maps exceeding limit of ${maxMapsLimit}`, 0);
-        }
-
         let newRecords = [];
         let mapperContent = '';
+        let inaccurateOverflowCount = 0;
+
+        // Auto-switch to inaccurate when user has > 100 maps (accurate mode only)
+        if (finalAlertType === 'accurate') {
+            const mapList = await fetchMapListOnly(username);
+            const mapCount = mapList.length;
+
+            // Always persist map count for admin panel
+            if (alertId) {
+                await client.query(
+                    'UPDATE alerts SET map_count = $1 WHERE id = $2',
+                    [mapCount, alertId]
+                );
+            }
+
+            if (mapCount > AUTO_INACCURATE_MAP_THRESHOLD) {
+                console.log(`🔄 Auto-switching ${username} to inaccurate mode (${mapCount} maps > ${AUTO_INACCURATE_MAP_THRESHOLD})`);
+
+                if (alertId && mapList.length > 0) {
+                    await client.query(
+                        'UPDATE alerts SET alert_type = $1, map_count = $2 WHERE id = $3',
+                        ['inaccurate', mapCount, alertId]
+                    );
+
+                    for (const map of mapList) {
+                        await client.query(
+                            'INSERT INTO alert_maps (alert_id, mapid) VALUES ($1, $2) ON CONFLICT (alert_id, mapid) DO NOTHING',
+                            [alertId, map.MapUid]
+                        );
+                    }
+                    console.log(`✅ Populated alert_maps with ${mapList.length} maps for ${username}`);
+
+                    const { checkMapPositions } = require('./checkMapPositions');
+                    const positionResults = await checkMapPositions(mapList.map(m => m.MapUid));
+                    for (const r of positionResults) {
+                        if (r.found) {
+                            await client.query(
+                                'INSERT INTO map_positions (map_uid, position, score, last_checked) VALUES ($1, $2, $3, NOW()) ON CONFLICT (map_uid) DO NOTHING',
+                                [r.map_uid, r.position, r.score]
+                            );
+                        }
+                    }
+                    console.log(`✅ Initialized map_positions baseline for ${username}`);
+
+                    finalAlertType = 'inaccurate';
+                }
+            }
+        }
 
         if (finalAlertType === 'accurate') {
             // Traditional accurate mode - fetch full leaderboards
             console.log(`🎯 Processing ${username} in accurate mode`);
-            // fetchMapsAndLeaderboards already has retry logic built in, no need to wrap in withRetry
             newRecords = await fetchMapsAndLeaderboards(username, '1d');
+            newRecords = applyRecordFilterToMaps(newRecords, recordFilter);
 
             // Cache leaderboard data for each map
             for (const record of newRecords) {
@@ -280,9 +347,18 @@ const processMapAlertCheck = async (username, email) => {
         } else if (finalAlertType === 'inaccurate') {
             // Inaccurate mode - use position API
             console.log(`⚡ Processing ${username} in inaccurate mode`);
-            newRecords = await processInaccurateMode(username, client);
+            const inaccurateResult = await processInaccurateMode(username, client, alertId);
+            newRecords = applyRecordFilterToMaps(inaccurateResult.records, recordFilter);
+            inaccurateOverflowCount = inaccurateResult.overflowMapCount || 0;
 
-            if (newRecords.length > 0) {
+            if (inaccurateOverflowCount > 0) {
+                if (recordFilter === 'all') {
+                    mapperContent = `${INACCURATE_OVERFLOW_MESSAGE} (${inaccurateOverflowCount} maps)`;
+                } else {
+                    console.log(`ℹ️ Overflow hit for ${username}; skipping mapper email due to record_filter=${recordFilter}`);
+                    mapperContent = '';
+                }
+            } else if (newRecords.length > 0) {
                 console.log(`📊 Found ${newRecords.length} new records for ${username}`);
                 mapperContent = await formatNewRecords(newRecords);
             } else {
@@ -295,12 +371,16 @@ const processMapAlertCheck = async (username, email) => {
         // Save email body to DynamoDB (will be sent later by email sender)
         await saveEmailBodyToDynamoDB(username, username, email, mapperContent);
 
-        // Log notification history
-        await logNotificationHistory(username, 'mapper_alert', newRecords.length > 0 ? 'sent' : 'no_new_times',
-            newRecords.length > 0 ? `Notification sent for ${newRecords.length} new times!` : 'No new notifications were sent',
-            newRecords.length);
+        const hasMapperNotification = mapperContent && mapperContent.trim().length > 0;
+        const recordsForLog = hasMapperNotification
+            ? (newRecords.length > 0 ? newRecords.length : inaccurateOverflowCount)
+            : 0;
+        await logNotificationHistory(username, 'mapper_alert',
+            hasMapperNotification ? 'sent' : 'no_new_times',
+            hasMapperNotification ? `Notification sent for ${recordsForLog} map(s)!` : 'No new notifications were sent',
+            recordsForLog);
 
-        return { success: true, recordsFound: newRecords.length, phase: 1, alert_type: finalAlertType };
+        return { success: true, recordsFound: recordsForLog, phase: 1, alert_type: finalAlertType };
     } catch (error) {
         console.error(`❌ Error processing map alerts for ${username}:`, {
             message: error.message,
@@ -314,12 +394,57 @@ const processMapAlertCheck = async (username, email) => {
     }
 };
 
+// Fetch leaderboard for a map and filter by period (1d) - same as accurate mode
+const fetchLeaderboardForMap = async (mapUid) => {
+    try {
+        const leaderboard = await getRecordsFromApi(mapUid);
+        const filtered = filterRecordsByPeriod(leaderboard, '1d');
+
+        return filtered.map(record => {
+            const ts = record.timestamp;
+            const timestampMs = ts != null ? (ts < 1e12 ? ts * 1000 : ts) : Date.now();
+            return {
+                accountId: record.accountId,
+                zoneName: record.zoneName || 'World',
+                position: record.position,
+                timestamp: Math.floor(timestampMs / 1000) // formatNewRecords expects seconds
+            };
+        });
+    } catch (error) {
+        console.error(`❌ Error fetching leaderboard for map ${mapUid}:`, error.message);
+        return [];
+    }
+};
+
 // Process inaccurate mode using position API
-const processInaccurateMode = async (username, client) => {
+const processInaccurateMode = async (username, client, alertId) => {
     console.log(`⚡ Processing inaccurate mode for ${username}`);
 
     try {
-        // Get user's map UIDs
+        const { fetchMapListOnly } = require('./mapSearch');
+
+        // Sync alert_maps with current map list (new maps since last run)
+        const mapList = await fetchMapListOnly(username);
+        const currentMapUids = new Set(mapList.map(m => m.MapUid));
+        const mapUidToName = new Map(mapList.map(m => [m.MapUid, m.Name]));
+
+        const { rows: existingRows } = await client.query(
+            'SELECT mapid FROM alert_maps am JOIN alerts a ON am.alert_id = a.id JOIN users u ON a.user_id = u.id WHERE u.username = $1',
+            [username]
+        );
+        const existingMapUids = new Set(existingRows.map(r => r.mapid));
+
+        const newMapUids = [...currentMapUids].filter(uid => !existingMapUids.has(uid));
+        if (newMapUids.length > 0 && alertId) {
+            for (const mapUid of newMapUids) {
+                await client.query(
+                    'INSERT INTO alert_maps (alert_id, mapid) VALUES ($1, $2) ON CONFLICT (alert_id, mapid) DO NOTHING',
+                    [alertId, mapUid]
+                );
+            }
+            console.log(`✅ Synced ${newMapUids.length} new maps to alert_maps for ${username}`);
+        }
+
         const mapsQuery = `
             SELECT am.mapid
             FROM alert_maps am
@@ -333,90 +458,109 @@ const processInaccurateMode = async (username, client) => {
 
         if (mapUids.length === 0) {
             console.log(`ℹ️ No maps found for ${username}`);
-            return [];
+            return { records: [], overflowMapCount: 0 };
+        }
+
+        if (alertId) {
+            await client.query(
+                'UPDATE alerts SET map_count = $1 WHERE id = $2',
+                [mapUids.length, alertId]
+            );
         }
 
         console.log(`🗺️ Checking positions for ${mapUids.length} maps`);
 
-        // Import the position checking function
         const { checkMapPositions } = require('./checkMapPositions');
-
-        // Check positions efficiently using position API
         const positionResults = await withRetry(
             () => checkMapPositions(mapUids),
             `Position check for ${mapUids.length} maps`
         );
 
-        const changedMaps = [];
+        const positionChanges = [];
+        const uninitializedMaps = [];
 
-        // Compare with stored positions
         for (const result of positionResults) {
-            if (!result.found) continue; // Skip maps with no position data
+            if (!result.found) continue;
 
-            // Get stored position for this map
-            const positionQuery = `
-                SELECT position, score
-                FROM map_positions
-                WHERE map_uid = $1
-            `;
-
-            const { rows: positionRows } = await client.query(positionQuery, [result.map_uid]);
+            const { rows: positionRows } = await client.query(
+                'SELECT position, score FROM map_positions WHERE map_uid = $1',
+                [result.map_uid]
+            );
 
             if (positionRows.length === 0) {
-                // First time checking this map - store initial position
+                const mapName = mapUidToName.get(result.map_uid) || result.map_uid;
+                uninitializedMaps.push({ mapId: result.map_uid, mapName });
                 await client.query(
                     'INSERT INTO map_positions (map_uid, position, score, last_checked) VALUES ($1, $2, $3, NOW())',
                     [result.map_uid, result.position, result.score]
                 );
-                console.log(`📝 Initialized position for map ${result.map_uid}: ${result.position}`);
                 continue;
             }
 
             const storedPosition = positionRows[0];
-
-            // Check if position has changed (new players)
             if (result.position !== storedPosition.position) {
                 console.log(`🎯 Position changed for map ${result.map_uid}: ${storedPosition.position} → ${result.position}`);
 
-                // Update stored position
                 await client.query(
                     'UPDATE map_positions SET position = $1, score = $2, last_checked = NOW() WHERE map_uid = $3',
                     [result.position, result.score, result.map_uid]
                 );
 
-                // Fetch full leaderboard for this map
-                const leaderboardData = await fetchLeaderboardForMap(result.map_uid);
-
-                if (leaderboardData && leaderboardData.length > 0) {
-                    changedMaps.push({
-                        mapId: result.map_uid,
-                        mapName: `Map ${result.map_uid}`, // We'll need to get actual map name
-                        leaderboard: leaderboardData,
-                        newPlayers: result.position - storedPosition.position
-                    });
-                }
+                const mapName = mapUidToName.get(result.map_uid) || result.map_uid;
+                positionChanges.push({
+                    mapId: result.map_uid,
+                    mapName
+                });
             }
         }
 
-        console.log(`📊 Found ${changedMaps.length} maps with new players`);
-        return changedMaps;
+        if (uninitializedMaps.length > 0) {
+            console.log(`📝 Position initialization complete for ${uninitializedMaps.length} maps`);
+        }
 
+        const mapsToFetch = positionChanges.length + uninitializedMaps.length;
+        if (mapsToFetch === 0) {
+            console.log(`📊 Found 0 maps with new players`);
+            return { records: [], overflowMapCount: 0 };
+        }
+
+        if (mapsToFetch > INACCURATE_OVERFLOW_THRESHOLD) {
+            console.log(`📊 Found ${mapsToFetch} maps with new players (overflow, using summary)`);
+            return { records: [], overflowMapCount: mapsToFetch };
+        }
+
+        const changedMaps = [];
+        const sleepMs = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        for (const change of positionChanges) {
+            const leaderboardData = await fetchLeaderboardForMap(change.mapId);
+            if (leaderboardData.length > 0) {
+                changedMaps.push({
+                    mapId: change.mapId,
+                    mapName: change.mapName,
+                    leaderboard: leaderboardData
+                });
+            }
+            await sleepMs(500);
+        }
+
+        for (const map of uninitializedMaps) {
+            const leaderboardData = await fetchLeaderboardForMap(map.mapId);
+            if (leaderboardData.length > 0) {
+                changedMaps.push({
+                    mapId: map.mapId,
+                    mapName: map.mapName,
+                    leaderboard: leaderboardData
+                });
+            }
+            await sleepMs(500);
+        }
+
+        console.log(`📊 Found ${changedMaps.length} maps with new players`);
+        return { records: changedMaps, overflowMapCount: 0 };
     } catch (error) {
         console.error(`❌ Error processing inaccurate mode for ${username}:`, error);
         throw error;
-    }
-};
-
-// Fetch leaderboard for a specific map
-const fetchLeaderboardForMap = async (mapUid) => {
-    try {
-        // This would use the existing mapSearch logic to fetch leaderboard
-        // For now, return empty array - this needs to be implemented
-        console.log(`🔄 Fetching leaderboard for map ${mapUid}`);
-        return [];
-    } catch (error) {
-        console.error(`❌ Error fetching leaderboard for map ${mapUid}:`, error);
-        return [];
     }
 };
 

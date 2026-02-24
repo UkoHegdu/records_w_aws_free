@@ -62,6 +62,43 @@ const getRecordsFromApi = async (mapUid) => {
     }
 };
 
+/**
+ * Fetch map list only from Trackmania Exchange (no leaderboards).
+ * Returns array of { MapUid, MapId, Name } for maps by author.
+ * Used for map count check before processing (e.g. auto-switch to inaccurate when > 100).
+ */
+const fetchMapListOnly = async (username) => {
+    const baseUrl = 'https://trackmania.exchange/api/maps';
+    const params = {
+        author: username,
+        fields: 'Name,MapId,MapUid,Authors'
+    };
+
+    const allResults = [];
+
+    await fetchWithRetry(async () => {
+        let hasMore = true;
+        let lastMapId = null;
+
+        while (hasMore) {
+            const queryParams = new URLSearchParams(params);
+            if (lastMapId) queryParams.append('after', lastMapId);
+
+            const url = `${baseUrl}?${queryParams.toString()}`;
+            const response = await axios.get(url);
+            const data = response.data;
+
+            if (data?.Results?.length > 0) {
+                allResults.push(...data.Results);
+                lastMapId = data.Results[data.Results.length - 1].MapId;
+            }
+
+            hasMore = data.More;
+        }
+    });
+
+    return allResults;
+};
 
 const fetchMapsAndLeaderboards = async (username, period = null) => {
     console.log('fetching maps and leaderboards');
@@ -116,8 +153,11 @@ const fetchMapsAndLeaderboards = async (username, period = null) => {
     return mapsAndLeaderboards;
 };
 
-// Export the function for use by scheduler
+// Export for use by scheduler and other lambdas
 exports.fetchMapsAndLeaderboards = fetchMapsAndLeaderboards;
+exports.fetchMapListOnly = fetchMapListOnly;
+exports.getRecordsFromApi = getRecordsFromApi;
+exports.filterRecordsByPeriod = filterRecordsByPeriod;
 
 const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
 const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');

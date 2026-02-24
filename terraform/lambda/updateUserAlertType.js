@@ -133,6 +133,8 @@ exports.handler = async (event, context) => {
                 };
             }
 
+            const shouldInitInaccurate = user.current_type !== 'inaccurate' && alert_type === 'inaccurate';
+
             // If switching from inaccurate to accurate, clean up position data
             if (user.current_type === 'inaccurate' && alert_type === 'accurate') {
                 console.log(`🧹 Cleaning up position data for user ${user.username}`);
@@ -159,10 +161,10 @@ exports.handler = async (event, context) => {
                 }
             }
 
-            // Update alert type
+            // Update alert type (omit updated_at if column does not exist)
             const updateQuery = `
                 UPDATE alerts 
-                SET alert_type = $1, updated_at = NOW()
+                SET alert_type = $1
                 WHERE user_id = $2
                 RETURNING alert_type, map_count
             `;
@@ -174,6 +176,43 @@ exports.handler = async (event, context) => {
             }
 
             const updatedAlert = updateRows[0];
+
+            // Initialize inaccurate mode baseline (alert_maps + map_positions).
+            // In Lambda we do this synchronously; request may take 10-30s for users with many maps.
+            if (shouldInitInaccurate) {
+                const { fetchMapListOnly } = require('./mapSearch');
+                const { checkMapPositions } = require('./checkMapPositions');
+                const alertId = user.alert_id;
+                const username = user.username;
+
+                try {
+                    console.log(`🚀 Initializing inaccurate mode for ${username} (alert_id=${alertId})`);
+                    const mapList = await fetchMapListOnly(username);
+                    const mapUids = mapList.map(m => m.MapUid).filter(Boolean);
+
+                    await client.query('UPDATE alerts SET map_count = $1 WHERE id = $2', [mapUids.length, alertId]);
+
+                    for (const mapUid of mapUids) {
+                        await client.query(
+                            'INSERT INTO alert_maps (alert_id, mapid) VALUES ($1, $2) ON CONFLICT (alert_id, mapid) DO NOTHING',
+                            [alertId, mapUid]
+                        );
+                    }
+
+                    const positionResults = await checkMapPositions(mapUids);
+                    for (const r of positionResults) {
+                        if (r && r.found) {
+                            await client.query(
+                                'INSERT INTO map_positions (map_uid, position, score, last_checked) VALUES ($1, $2, $3, NOW()) ON CONFLICT (map_uid) DO NOTHING',
+                                [r.map_uid, r.position, r.score]
+                            );
+                        }
+                    }
+                    console.log(`✅ Init complete for ${username}: ${mapUids.length} maps`);
+                } catch (initErr) {
+                    console.error(`❌ Init failed for ${username}:`, initErr?.message || initErr);
+                }
+            }
 
             await client.end();
 
@@ -190,7 +229,8 @@ exports.handler = async (event, context) => {
                     user_id: user_id,
                     username: user.username,
                     alert_type: updatedAlert.alert_type,
-                    map_count: updatedAlert.map_count
+                    map_count: updatedAlert.map_count,
+                    init_inaccurate_started: shouldInitInaccurate
                 })
             };
 

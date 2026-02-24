@@ -1,0 +1,21 @@
+# Local Docker run with Neon (no local Postgres).
+# Create .env in repo root with NEON_DB_CONNECTION_STRING, JWT_SECRET, etc. (see backend/ENV.md).
+
+services:
+  backend:
+    build: ./backend
+    env_file: .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_BACKEND_URL: http://localhost:3000
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

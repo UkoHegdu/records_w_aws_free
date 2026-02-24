@@ -204,18 +204,20 @@ async function handleCreateAlert(event, headers) {
         const { username, email } = userResult.rows[0];
         console.log(`Creating alert for user: ${username} (${email})`);
 
-        // Get map count from request body
-        const mapCount = body.MapCount || 0;
         const alertType = body.alert_type || 'accurate';
+
+        // Fetch actual map count from TM Exchange
+        const { fetchMapListOnly } = require('./mapSearch');
+        const mapList = await fetchMapListOnly(username);
+        const mapCount = mapList.length;
 
         console.log(`📊 Map count: ${mapCount}, Alert type: ${alertType}`);
 
-        // Check if user exceeds map limit for accurate mode
-        const maxMapsLimit = parseInt(process.env.MAX_MAPS_PER_USER || '200');
+        const AUTO_INACCURATE_MAP_THRESHOLD = 100;
         let finalAlertType = alertType;
 
-        if (alertType === 'accurate' && mapCount > maxMapsLimit) {
-            console.log(`⚠️ User ${username} has ${mapCount} maps, exceeding limit of ${maxMapsLimit}. Switching to inaccurate mode.`);
+        if (alertType === 'accurate' && mapCount > AUTO_INACCURATE_MAP_THRESHOLD) {
+            console.log(`⚠️ User ${username} has ${mapCount} maps > ${AUTO_INACCURATE_MAP_THRESHOLD}. Switching to inaccurate mode.`);
             finalAlertType = 'inaccurate';
         }
 
@@ -228,11 +230,30 @@ async function handleCreateAlert(event, headers) {
         const alertId = alertResult.rows[0].id;
         console.log(`✅ Alert created successfully for user ${userId} with ID ${alertId}`);
 
-        // If inaccurate mode, initialize position data for all maps
-        if (finalAlertType === 'inaccurate' && mapCount > 0) {
-            console.log(`🚀 Initializing position data for ${mapCount} maps in inaccurate mode`);
-            // Note: Position initialization will be handled by the mapSearchBackground process
-            // when it processes the alert maps
+        // If inaccurate mode, initialize alert_maps and map_positions
+        const shouldInitInaccurate = mapCount > AUTO_INACCURATE_MAP_THRESHOLD || alertType === 'inaccurate';
+        if (shouldInitInaccurate && mapCount > 0) {
+            try {
+                const { checkMapPositions } = require('./checkMapPositions');
+                for (const map of mapList) {
+                    await client.query(
+                        'INSERT INTO alert_maps (alert_id, mapid) VALUES ($1, $2) ON CONFLICT (alert_id, mapid) DO NOTHING',
+                        [alertId, map.MapUid]
+                    );
+                }
+                const positionResults = await checkMapPositions(mapList.map(m => m.MapUid));
+                for (const r of positionResults) {
+                    if (r.found) {
+                        await client.query(
+                            'INSERT INTO map_positions (map_uid, position, score, last_checked) VALUES ($1, $2, $3, NOW()) ON CONFLICT (map_uid) DO NOTHING',
+                            [r.map_uid, r.position, r.score]
+                        );
+                    }
+                }
+                console.log(`✅ Initialized inaccurate mode for ${username} (${mapCount} maps)`);
+            } catch (initErr) {
+                console.warn(`⚠️ Init inaccurate failed for ${username}:`, initErr?.message);
+            }
         }
 
         return {

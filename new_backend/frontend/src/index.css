@@ -1,0 +1,271 @@
+/* Import status classes */
+@import './styles/status.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Trackmania-inspired Design System */
+@layer base {
+    :root {
+        /* Trackmania Blue & Orange theme */
+        --background: 220 27% 6%;
+        --foreground: 210 40% 98%;
+
+        --card: 220 27% 8%;
+        --card-foreground: 210 40% 98%;
+
+        --popover: 220 27% 8%;
+        --popover-foreground: 210 40% 98%;
+
+        /* Trackmania signature blue */
+        --primary: 210 100% 56%;
+        --primary-foreground: 220 27% 6%;
+        --primary-glow: 210 100% 70%;
+
+        /* Trackmania racing green accent */
+        --secondary: 120 60% 35%;
+        --secondary-foreground: 220 27% 6%;
+        --secondary-glow: 120 60% 45%;
+
+        /* Bright green for gradients */
+        --secondary-bright: 120 100% 50%;
+        --secondary-bright-glow: 120 100% 65%;
+
+        /* Medium green for buttons with dark text */
+        --secondary-medium: 120 80% 45%;
+        --secondary-medium-foreground: 220 27% 6%;
+
+        --muted: 220 27% 12%;
+        --muted-foreground: 215 20% 65%;
+
+        --accent: 120 60% 35%;
+        --accent-foreground: 220 27% 6%;
+
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 210 40% 98%;
+
+        --border: 220 27% 18%;
+        --input: 220 27% 12%;
+        --ring: 210 100% 56%;
+
+        --radius: 12px;
+
+        /* Racing-inspired gradients */
+        --gradient-primary: linear-gradient(135deg, hsl(210 100% 56%), hsl(210 100% 70%));
+        --gradient-secondary: linear-gradient(135deg, hsl(120 100% 50%), hsl(120 100% 65%));
+        --gradient-racing: linear-gradient(135deg, hsl(210 100% 56%) 0%, hsl(120 100% 50%) 100%);
+        --gradient-dark: linear-gradient(180deg, hsl(220 27% 8%), hsl(220 27% 4%));
+
+        /* Racing shadows */
+        --shadow-glow: 0 0 40px hsl(210 100% 56% / 0.3);
+        --shadow-green-glow: 0 0 30px hsl(120 60% 35% / 0.4);
+        --shadow-elegant: 0 10px 40px -10px hsl(220 27% 0% / 0.8);
+
+        /* Animations */
+        --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    /* Test Environment Theme - Orange/Amber colors */
+    .test-environment {
+        /* Override primary colors with orange/amber theme */
+        --primary: 25 95% 53%;
+        /* Orange */
+        --primary-foreground: 220 27% 6%;
+        --primary-glow: 25 95% 65%;
+        /* Lighter orange */
+
+        /* Override secondary colors with amber theme */
+        --secondary: 45 93% 47%;
+        /* Amber */
+        --secondary-foreground: 220 27% 6%;
+        --secondary-glow: 45 93% 60%;
+        /* Lighter amber */
+
+        /* Bright amber for gradients */
+        --secondary-bright: 45 100% 60%;
+        --secondary-bright-glow: 45 100% 75%;
+
+        /* Medium amber for buttons */
+        --secondary-medium: 45 85% 55%;
+        --secondary-medium-foreground: 220 27% 6%;
+
+        /* Override accent */
+        --accent: 45 93% 47%;
+        --accent-foreground: 220 27% 6%;
+
+        /* Override ring color */
+        --ring: 25 95% 53%;
+
+        /* Test environment gradients */
+        --gradient-primary: linear-gradient(135deg, hsl(25 95% 53%), hsl(25 95% 65%));
+        --gradient-secondary: linear-gradient(135deg, hsl(45 100% 60%), hsl(45 100% 75%));
+        --gradient-racing: linear-gradient(135deg, hsl(25 95% 53%) 0%, hsl(45 100% 60%) 100%);
+
+        /* Test environment shadows */
+        --shadow-glow: 0 0 40px hsl(25 95% 53% / 0.3);
+        --shadow-green-glow: 0 0 30px hsl(45 93% 47% / 0.4);
+    }
+
+    .light {
+        --background: 210 40% 98%;
+        --foreground: 220 27% 15%;
+        --card: 0 0% 100%;
+        --card-foreground: 220 27% 15%;
+        --muted: 210 40% 92%;
+        --muted-foreground: 215 16% 47%;
+        --border: 214 32% 91%;
+        --input: 214 32% 91%;
+    }
+}
+
+@layer base {
+    * {
+        border-color: hsl(var(--border));
+    }
+
+    body {
+        @apply bg-background text-foreground font-sans;
+    }
+
+    html {
+        scroll-behavior: smooth;
+    }
+}
+
+@layer components {
+
+    /* Racing-themed animations */
+    .racing-glow {
+        @apply relative;
+    }
+
+    .racing-glow::before {
+        content: '';
+        @apply absolute inset-0 bg-gradient-to-r from-primary/20 via-transparent to-secondary/20 blur-xl -z-10;
+    }
+
+    .speed-lines {
+        background-image:
+            linear-gradient(90deg, transparent 95%, hsl(210 100% 56% / 0.1) 95%),
+            linear-gradient(90deg, transparent 90%, hsl(120 100% 50% / 0.1) 90%);
+        background-size: 20px 2px, 30px 3px;
+        animation: speed-lines 2s linear infinite;
+    }
+
+    @keyframes speed-lines {
+        0% {
+            background-position: 0 0, 0 0;
+        }
+
+        100% {
+            background-position: 20px 0, 30px 0;
+        }
+    }
+
+    /* Hover effects */
+    .hover-lift {
+        @apply transition-all duration-300;
+    }
+
+    .hover-lift:hover {
+        @apply transform -translate-y-1;
+    }
+
+    /* Racing button styles */
+    .btn-racing {
+        @apply bg-gradient-to-r from-primary to-primary-glow text-primary-foreground font-semibold py-3 px-6 rounded-xl;
+        @apply shadow-lg transition-all duration-300;
+        @apply hover:scale-105 active:scale-95;
+        box-shadow: var(--shadow-glow);
+    }
+
+    .btn-racing:hover {
+        box-shadow: var(--shadow-glow);
+    }
+
+    .btn-racing-secondary {
+        @apply bg-gradient-to-r from-secondary-bright to-secondary-bright-glow text-secondary-foreground font-semibold py-3 px-6 rounded-xl;
+        @apply shadow-lg transition-all duration-300;
+        @apply hover:scale-105 active:scale-95;
+        box-shadow: var(--shadow-green-glow);
+    }
+
+    .btn-racing-secondary:hover {
+        box-shadow: var(--shadow-green-glow);
+    }
+
+    .btn-racing-secondary-medium {
+        @apply bg-gradient-to-r from-secondary-medium to-secondary-medium/80 text-secondary-medium-foreground font-semibold py-3 px-6 rounded-xl;
+        @apply shadow-lg transition-all duration-300;
+        @apply hover:scale-105 active:scale-95;
+        box-shadow: var(--shadow-green-glow);
+    }
+
+    .btn-racing-secondary-medium:hover {
+        box-shadow: var(--shadow-green-glow);
+    }
+
+    /* Glass morphism effects */
+    .glass {
+        @apply backdrop-blur-xl bg-card/80 border border-border/50;
+    }
+
+    /* Racing card */
+    .racing-card {
+        @apply glass rounded-2xl p-6 hover-lift;
+        @apply transition-all duration-500;
+        box-shadow: var(--shadow-elegant);
+    }
+
+    .racing-card:hover {
+        box-shadow: var(--shadow-glow);
+    }
+}
+
+@layer base {
+    * {
+        border-color: hsl(var(--border));
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+/* Custom scrollbar styling */
+@layer utilities {
+    .scrollbar-thin {
+        scrollbar-width: thin;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: hsl(var(--muted-foreground) / 0.3);
+        border-radius: 3px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background-color: hsl(var(--muted-foreground) / 0.5);
+    }
+
+    .scrollbar-thumb-muted-foreground\/30::-webkit-scrollbar-thumb {
+        background-color: hsl(var(--muted-foreground) / 0.3);
+    }
+
+    .scrollbar-thumb-muted-foreground\/50::-webkit-scrollbar-thumb:hover {
+        background-color: hsl(var(--muted-foreground) / 0.5);
+    }
+
+    .scrollbar-track-transparent::-webkit-scrollbar-track {
+        background: transparent;
+    }
+}

@@ -29,7 +29,8 @@ create table alerts (
    email      text not null,
    created_at timestamp default now(),
    alert_type VARCHAR(20) DEFAULT 'accurate' CHECK (alert_type IN ('accurate', 'inaccurate')),
-   map_count  integer DEFAULT 0
+   map_count  integer DEFAULT 0,
+   record_filter VARCHAR(20) DEFAULT 'top5' CHECK (record_filter IN ('top5', 'wr', 'all'))
 );
 
 -- Alert maps table 
@@ -170,3 +171,15 @@ CREATE INDEX IF NOT EXISTS idx_notification_history_status ON notification_histo
 -- Indexes for feedback
 CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id);
+
+-- Migration: add record_filter to existing alerts tables (run if column missing)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'alerts' AND column_name = 'record_filter'
+  ) THEN
+    ALTER TABLE alerts ADD COLUMN record_filter VARCHAR(20) NOT NULL DEFAULT 'top5'
+      CHECK (record_filter IN ('top5', 'wr', 'all'));
+  END IF;
+END $$;

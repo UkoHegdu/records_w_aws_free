@@ -1,10 +1,29 @@
 // lambda/emailSender.js - Final step to send combined emails
+// Uses Gmail SMTP (port 587) - same config as new_backend
 const { DynamoDBClient, ScanCommand } = require('@aws-sdk/client-dynamodb');
-const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
+const nodemailer = require('nodemailer');
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-const sesClient = new SESClient({ region: process.env.AWS_REGION });
+
+let transporter = null;
+const getTransporter = () => {
+    if (transporter) return transporter;
+    const user = process.env.EMAIL_USER;
+    const pass = process.env.EMAIL_PASS;
+    if (!user || !pass) {
+        throw new Error('EMAIL_USER and EMAIL_PASS required for email');
+    }
+    // Port 587: many providers block outbound 465
+    transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        requireTLS: true,
+        auth: { user, pass }
+    });
+    return transporter;
+};
 
 exports.handler = async (event, context) => {
     console.log('📧 Email Sender Lambda triggered!', event);
@@ -110,34 +129,12 @@ exports.handler = async (event, context) => {
     }
 };
 
-// Send email using AWS SES
+// Send email using Gmail SMTP (port 587)
 async function sendEmail(to, subject, text) {
-    const params = {
-        Source: process.env.SES_FROM_EMAIL,
-        Destination: {
-            ToAddresses: [to]
-        },
-        Message: {
-            Subject: {
-                Data: subject,
-                Charset: 'UTF-8'
-            },
-            Body: {
-                Text: {
-                    Data: text,
-                    Charset: 'UTF-8'
-                }
-            }
-        }
-    };
-
-    try {
-        const command = new SendEmailCommand(params);
-        const result = await sesClient.send(command);
-        console.log(`✅ Email sent successfully to ${to}, MessageId: ${result.MessageId}`);
-        return result;
-    } catch (error) {
-        console.error(`❌ Failed to send email to ${to}:`, error.message);
-        throw error;
-    }
+    const from = process.env.EMAIL_USER;
+    if (!from) throw new Error('EMAIL_USER required for email from address');
+    const transport = getTransporter();
+    const info = await transport.sendMail({ from, to, subject, text });
+    console.log(`✅ Email sent to ${to}, messageId: ${info.messageId}`);
+    return info;
 }

@@ -1,7 +1,8 @@
 // lambda/checkMapPositions.js - Check map positions for inaccurate mode
-const oauthApiClient = require('./shared/oauthApiClient');
+// Uses Nadeo position API: POST .../leaderboard/group/map?scores[mapUid]=score
+const apiClient = require('./shared/apiClient');
 
-const BASE_URL = 'https://webservices.openplanet.dev/live';
+const NEW_PLAYER_SCORE_MS = 9999999; // sentinel score to get "position if a new player joined"
 
 // Check map positions for multiple maps efficiently
 const checkMapPositions = async (mapUids) => {
@@ -18,7 +19,6 @@ const checkMapPositions = async (mapUids) => {
     // Process maps in batches of 50 (API limit)
     for (let i = 0; i < mapUids.length; i += batchSize) {
         const batch = mapUids.slice(i, i + batchSize);
-        console.log(`📦 Processing batch ${Math.floor(i / batchSize) + 1}: ${batch.length} maps`);
 
         try {
             const batchResults = await checkBatchMapPositions(batch);
@@ -34,42 +34,44 @@ const checkMapPositions = async (mapUids) => {
 };
 
 // Check positions for a batch of maps
+// Nadeo API: POST /api/token/leaderboard/group/map?scores[mapUid]=score
+// Body: { maps: [{ mapUid, groupUid: "Personal_Best" }] }
+// Response: array of { mapUid, score, zones: [{ ranking: { position } }] }
 const checkBatchMapPositions = async (mapUids) => {
+    const baseUrl = process.env.LEAD_API;
     const params = new URLSearchParams();
     mapUids.forEach(mapUid => {
-        params.append('mapUid[]', mapUid);
+        params.append(`scores[${mapUid}]`, NEW_PLAYER_SCORE_MS);
     });
-
-    const url = `${BASE_URL}/leaderboards/position?${params.toString()}`;
-    console.log(`🌐 Fetching positions for ${mapUids.length} maps`);
+    const url = `${baseUrl}/api/token/leaderboard/group/map?${params.toString()}`;
+    const body = {
+        maps: mapUids.map(mapUid => ({ mapUid, groupUid: 'Personal_Best' }))
+    };
 
     try {
-        const response = await oauthApiClient.get(url);
-        const positionData = response.data;
+        const response = await apiClient.post(url, body);
+        const positionArray = Array.isArray(response.data) ? response.data : [];
+
+        // Build map: mapUid -> { position, score }
+        const byMapUid = new Map();
+        for (const item of positionArray) {
+            const position = item.zones?.[0]?.ranking?.position;
+            if (typeof position === 'number') {
+                byMapUid.set(item.mapUid, { position, score: item.score });
+            }
+        }
 
         const results = [];
-
-        // Process each map's position data
         for (const mapUid of mapUids) {
-            const mapPositionData = positionData[mapUid];
-
-            if (!mapPositionData || !Array.isArray(mapPositionData)) {
-                console.warn(`⚠️ No position data for map ${mapUid}`);
-                continue;
-            }
-
-            // Find the position for score 9999999 (new player threshold)
-            const newPlayerPosition = mapPositionData.find(pos => pos.score === 9999999);
-
-            if (newPlayerPosition) {
+            const data = byMapUid.get(mapUid);
+            if (data) {
                 results.push({
                     map_uid: mapUid,
-                    position: newPlayerPosition.position,
-                    score: newPlayerPosition.score,
+                    position: data.position,
+                    score: data.score,
                     found: true
                 });
             } else {
-                // If no position found for 9999999, this means the map has no players yet
                 results.push({
                     map_uid: mapUid,
                     position: null,
@@ -96,7 +98,7 @@ const initializeMapPositions = async (mapUids) => {
     return positionResults.map(result => ({
         map_uid: result.map_uid,
         position: result.position,
-        score: result.score || 9999999,
+        score: result.score ?? NEW_PLAYER_SCORE_MS,
         last_checked: new Date().toISOString()
     }));
 };

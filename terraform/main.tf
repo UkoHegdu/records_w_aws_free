@@ -27,6 +27,11 @@ data "aws_ssm_parameter" "email_user" {
   name = "/${var.environment}/EMAIL_USER"
 }
 
+data "aws_ssm_parameter" "email_pass" {
+  name       = "/${var.environment}/EMAIL_PASS"
+  with_decryption = true
+}
+
 data "aws_ssm_parameter" "auth_api_url" {
   name = "/${var.environment}/AUTH_API_URL"
 }
@@ -1191,7 +1196,8 @@ resource "aws_lambda_function" "email_sender" {
   environment {
     variables = {
       DAILY_EMAILS_TABLE_NAME = aws_dynamodb_table.daily_emails.name
-      SES_FROM_EMAIL = data.aws_ssm_parameter.email_user.value
+      EMAIL_USER = data.aws_ssm_parameter.email_user.value
+      EMAIL_PASS = data.aws_ssm_parameter.email_pass.value
     }
   }
 
