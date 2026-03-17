@@ -65,33 +65,17 @@ exports.handler = async (event, context) => {
                 }
 
                 // Build the email content
-                let emailText = '';
-                let subject = '';
+                const subject = `New times in ${emailBody.username}'s maps`;
+                let emailText = `Hello ${emailBody.username}!\n\nHere's your daily Trackmania update:\n\n`;
 
-                if (hasMapperContent && hasDriverContent) {
-                    // Combined email
-                    subject = `Daily Update: New Records & Position Changes`;
-                    emailText = `Hello ${emailBody.username}!\n\n`;
-                    emailText += `Here's your daily Trackmania update:\n\n`;
+                if (hasMapperContent) {
+                    emailText += `🗺️ NEW RECORDS ON YOUR MAPS:\n`;
+                    emailText += `${emailBody.mapper_content}\n\n`;
+                }
 
-                    if (hasMapperContent) {
-                        emailText += `🗺️ NEW RECORDS ON YOUR MAPS:\n`;
-                        emailText += `${emailBody.mapper_content}\n\n`;
-                    }
-
-                    if (hasDriverContent) {
-                        emailText += `🏎️ POSITION CHANGES:\n`;
-                        emailText += `${emailBody.driver_content}\n\n`;
-                    }
-                } else if (hasMapperContent) {
-                    // Mapper alerts only
-                    subject = `New times in ${emailBody.username}'s maps`;
-                    emailText = `New times have been driven on your map(s):\n\n${emailBody.mapper_content}`;
-                } else if (hasDriverContent) {
-                    // Driver notifications only
-                    subject = `Position Changes on Tracked Maps`;
-                    emailText = `Hello ${emailBody.username}!\n\n`;
-                    emailText += `Here are the position changes on maps you're tracking:\n\n${emailBody.driver_content}`;
+                if (hasDriverContent) {
+                    emailText += `🏎️ POSITION CHANGES:\n`;
+                    emailText += `${emailBody.driver_content}\n\n`;
                 }
 
                 // Send the email

@@ -333,11 +333,11 @@ const DriverPage: React.FC = () => {
                     /* Notifications List */
                     <div className="space-y-4">
                         {notifications.length > 0 && (
-                            <div className="flex justify-between items-center mb-4">
+                            <div className="flex justify-between items-center mb-3">
                                 <div className="flex items-center gap-2">
-                                    <h2 className="text-xl font-semibold">Your Active Notifications</h2>
-                                    <span className="px-2 py-1 bg-primary/20 text-primary text-sm font-medium rounded-full border border-primary/30">
-                                        {notifications.length} {notifications.length === 1 ? 'notification' : 'notifications'}
+                                    <h2 className="text-lg font-semibold">Your Active Notifications</h2>
+                                    <span className="px-2 py-0.5 bg-primary/20 text-primary text-xs font-medium rounded-full border border-primary/30">
+                                        {notifications.length}
                                     </span>
                                 </div>
                                 <button
@@ -348,10 +348,10 @@ const DriverPage: React.FC = () => {
                                             setShowSearchModal(true);
                                         }
                                     }}
-                                    className="btn-racing-secondary flex items-center gap-2"
+                                    className="btn-racing-secondary flex items-center gap-2 text-sm py-1.5 px-3"
                                 >
-                                    <Plus size={20} />
-                                    Add Notification
+                                    <Plus size={16} />
+                                    Add
                                 </button>
                             </div>
                         )}
@@ -424,67 +424,56 @@ const DriverPage: React.FC = () => {
                             <>
                                 {getCurrentPageNotifications().map((notification) => {
                                     const isInactive = notification.status === 'inactive';
+                                    const pos = notification.currentPosition;
+                                    const positionBadgeClass = isInactive
+                                        ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
+                                        : pos === 1
+                                            ? 'bg-gradient-to-r from-sky-300 to-sky-400 text-white'
+                                            : pos === 2
+                                                ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white'
+                                                : pos === 3
+                                                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                                                    : pos === 4
+                                                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
+                                                        : pos === 5
+                                                            ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white'
+                                                            : 'bg-gradient-to-r from-primary to-primary-glow text-white';
 
                                     return (
-                                        <div key={notification.id} className={`racing-card ${isInactive ? 'border-orange-500/50 bg-orange-50/10' : ''}`}>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-4 flex-1">
-                                                    <div className={`p-3 rounded-xl ${isInactive
-                                                        ? 'bg-gradient-to-br from-orange-500 to-orange-600 shadow-orange-500/20'
-                                                        : 'bg-gradient-to-br from-primary to-primary-glow shadow-glow'
-                                                        }`}>
-                                                        {isInactive ? (
-                                                            <Target className="w-5 h-5 text-white" />
-                                                        ) : (
-                                                            <Trophy className="w-5 h-5 text-white" />
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex-1">
-                                                        <h3 className={`font-semibold mb-1 ${isInactive ? 'text-orange-600' : 'text-foreground'}`}>
+                                        <div key={notification.id} className={`racing-card py-2 px-3 ${isInactive ? 'border-orange-500/50 bg-orange-50/10' : ''}`}>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className={`font-semibold text-sm truncate ${isInactive ? 'text-orange-600' : 'text-foreground'}`}>
                                                             {notification.mapName}
                                                         </h3>
-
-                                                        <div className="flex items-center gap-6 text-sm text-muted-foreground mb-2">
-                                                            <span>Map UID: {notification.mapUid}</span>
-                                                            <span>Created: {new Date(notification.createdAt).toLocaleDateString()}</span>
-                                                            {notification.lastChecked && (
-                                                                <span>Last checked: {new Date(notification.lastChecked).toLocaleDateString()}</span>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="flex items-center gap-4 text-sm">
-                                                            {isInactive ? (
-                                                                <span className="text-orange-600 font-medium">
-                                                                    Status: <strong>Inactive - No longer in top 5</strong>
-                                                                </span>
-                                                            ) : (
-                                                                <div className="flex flex-col gap-1">
-                                                                    <span className="text-foreground">
-                                                                        Current Position: <strong>#{notification.currentPosition}</strong>
-                                                                    </span>
-                                                                    <span className="text-muted-foreground text-xs">
-                                                                        Personal Best: <strong>{notification.personalBestFormatted}</strong>
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        {isInactive ? (
+                                                            <span className="text-orange-500 font-medium">Inactive</span>
+                                                        ) : (
+                                                            <span>PB: <strong className="text-foreground">{notification.personalBestFormatted}</strong></span>
+                                                        )}
+                                                        <span>·</span>
+                                                        <span>Added {new Date(notification.createdAt).toLocaleDateString()}</span>
+                                                        {notification.lastChecked && (
+                                                            <>
+                                                                <span>·</span>
+                                                                <span>Checked {new Date(notification.lastChecked).toLocaleDateString()}</span>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
 
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${isInactive
-                                                        ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
-                                                        : 'bg-gradient-to-r from-primary to-primary-glow text-white'
-                                                        }`}>
-                                                        {isInactive ? 'Inactive' : `Position #${notification.currentPosition}`}
+                                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                    <div className={`px-2 py-0.5 rounded-full text-xs font-bold ${positionBadgeClass}`}>
+                                                        {isInactive ? 'Inactive' : `#${pos}`}
                                                     </div>
-
                                                     <button
                                                         onClick={() => handleDeleteNotification(notification.id)}
-                                                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all duration-300"
+                                                        className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all duration-300"
                                                     >
-                                                        <Trash2 size={16} />
+                                                        <Trash2 size={14} />
                                                     </button>
                                                 </div>
                                             </div>

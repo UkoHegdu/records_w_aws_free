@@ -683,6 +683,14 @@ resource "aws_iam_role_policy" "lambda_dynamodb_policy" {
   })
 }
 
+# Lambda Layer for node_modules (shared across all functions)
+resource "aws_lambda_layer_version" "node_modules" {
+  filename            = "layer.zip"
+  layer_name          = "${var.app_name}-node-modules"
+  compatible_runtimes = ["nodejs18.x"]
+  source_code_hash    = filebase64sha256("layer.zip")
+}
+
 # Lambda Functions
 resource "aws_lambda_function" "user_search" {
   filename         = "lambda_functions.zip"
@@ -690,6 +698,7 @@ resource "aws_lambda_function" "user_search" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/user_search.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -704,6 +713,7 @@ resource "aws_lambda_function" "mapSearch" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/mapSearch.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30  # Reduced timeout since we're just queuing jobs
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -732,6 +742,7 @@ resource "aws_lambda_function" "mapSearchBackground" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/mapSearchBackground.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 900  # 15 minutes - maximum Lambda timeout
   reserved_concurrent_executions = 2  # Limit to 2 concurrent executions
   source_code_hash = filebase64sha256("lambda_functions.zip")
@@ -770,6 +781,7 @@ resource "aws_lambda_function" "checkJobStatus" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/checkJobStatus.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -791,6 +803,7 @@ resource "aws_lambda_function" "login" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/login.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -814,6 +827,7 @@ resource "aws_lambda_function" "register" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/register.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -835,6 +849,7 @@ resource "aws_lambda_function" "create_alert" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/create_alert.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -861,6 +876,7 @@ resource "aws_lambda_function" "get_user_profile" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/getUserProfile.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -883,6 +899,7 @@ resource "aws_lambda_function" "get_map_records" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/getMapRecords.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -910,6 +927,7 @@ resource "aws_lambda_function" "account_names" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/accountNames.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -933,6 +951,7 @@ resource "aws_lambda_function" "scheduler" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/scheduler.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 60  # 1 minute (just queuing jobs)
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -956,6 +975,7 @@ resource "aws_lambda_function" "schedulerProcessor" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/schedulerProcessor.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 900  # 15 minutes
   reserved_concurrent_executions = 1  # Sequential processing to respect API rate limits
   source_code_hash = filebase64sha256("lambda_functions.zip")
@@ -997,6 +1017,7 @@ resource "aws_lambda_function" "health" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/health.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30  # Quick health check
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1012,6 +1033,7 @@ resource "aws_lambda_function" "refresh_token" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/refreshToken.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1034,6 +1056,7 @@ resource "aws_lambda_function" "logout" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/logout.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1058,6 +1081,7 @@ resource "aws_lambda_function" "map_search_driver" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/mapSearchDriver.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1078,6 +1102,7 @@ resource "aws_lambda_function" "verify_tm_username" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/verifyTmUsername.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1106,6 +1131,7 @@ resource "aws_lambda_function" "driver_notifications" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/driverNotifications.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1139,6 +1165,7 @@ resource "aws_lambda_function" "driver_notification_processor" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/driverNotificationProcessor.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 900  # 15 minutes for processing
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1166,6 +1193,7 @@ resource "aws_lambda_function" "driver_notification_status_check" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/driverNotificationStatusCheck.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 900  # 15 minutes for processing
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1190,6 +1218,7 @@ resource "aws_lambda_function" "email_sender" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/emailSender.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1214,6 +1243,7 @@ resource "aws_lambda_function" "check_driver_positions" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/checkDriverPositions.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 60  # 1 minute for position API calls
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1242,6 +1272,7 @@ resource "aws_lambda_function" "get_admin_config" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/getAdminConfig.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1265,6 +1296,7 @@ resource "aws_lambda_function" "update_admin_config" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/updateAdminConfig.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1288,6 +1320,7 @@ resource "aws_lambda_function" "check_map_positions" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/checkMapPositions.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 60  # 1 minute for position API calls
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1316,6 +1349,7 @@ resource "aws_lambda_function" "get_admin_users" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/getAdminUsers.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1339,6 +1373,7 @@ resource "aws_lambda_function" "update_user_alert_type" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/updateUserAlertType.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1362,6 +1397,7 @@ resource "aws_lambda_function" "get_notification_history" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/getNotificationHistory.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1384,6 +1420,7 @@ resource "aws_lambda_function" "submit_feedback" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/submitFeedback.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1406,6 +1443,7 @@ resource "aws_lambda_function" "get_feedback" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/getFeedback.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1429,6 +1467,7 @@ resource "aws_lambda_function" "get_admin_daily_overview" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/getAdminDailyOverview.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1452,6 +1491,7 @@ resource "aws_lambda_function" "test" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/test.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 
@@ -1475,6 +1515,7 @@ resource "aws_lambda_function" "test_advanced" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "lambda/testAdvanced.handler"
   runtime         = "nodejs18.x"
+  layers          = [aws_lambda_layer_version.node_modules.arn]
   timeout         = 30
   source_code_hash = filebase64sha256("lambda_functions.zip")
 

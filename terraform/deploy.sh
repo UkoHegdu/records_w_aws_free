@@ -3,24 +3,10 @@
 
 set -e
 
+# Disable AWS CLI pager so commands don't pause waiting for input
+export AWS_PAGER=""
+
 echo "🚀 Starting Lambda deployment..."
-
-# Step 1: Remove old zip file to ensure source hash changes
-echo "🗑️  Removing old lambda_functions.zip..."
-rm -f lambda_functions.zip
-
-# Step 2: Build and package Lambda functions
-echo "📦 Packaging Lambda functions..."
-mkdir -p lambda-build
-cd lambda-build
-
-# Copy all Lambda functions and dependencies
-cp ../lambda/*.js .
-cp ../lambda/package.json .
-cp -r ../lambda/shared .
-
-# Install dependencies and create zip
-npm install --production
 
 # Check if zip command is available, if not install it
 if ! command -v zip &> /dev/null; then
@@ -40,12 +26,35 @@ if ! command -v zip &> /dev/null; then
     fi
 fi
 
-# Create zip file
-zip -r ../lambda_functions.zip .
-cd ..
+# Step 1: Build Lambda Layer (node_modules) — only when package.json changes
+PACKAGE_HASH=$(md5sum lambda/package.json | cut -d' ' -f1)
+if [ -f ".layer-hash" ] && [ "$(cat .layer-hash)" = "$PACKAGE_HASH" ] && [ -f "layer.zip" ]; then
+    echo "✅ Dependencies unchanged, reusing existing layer.zip"
+else
+    echo "📦 Building Lambda Layer (node_modules changed)..."
+    rm -rf layer-build
+    mkdir -p layer-build/nodejs
+    cp lambda/package.json layer-build/nodejs/
+    cd layer-build/nodejs
+    npm install --production
+    cd ../..
+    rm -f layer.zip
+    cd layer-build && zip -r ../layer.zip . && cd ..
+    rm -rf layer-build
+    echo "$PACKAGE_HASH" > .layer-hash
+    echo "✅ Lambda Layer built"
+fi
+
+# Step 2: Package Lambda functions (code only — no node_modules)
+echo "📦 Packaging Lambda functions (code only)..."
+rm -f lambda_functions.zip
+mkdir -p lambda-build
+cp lambda/*.js lambda-build/
+cp -r lambda/shared lambda-build/
+cd lambda-build && zip -r ../lambda_functions.zip . && cd ..
 rm -rf lambda-build
 
-echo "✅ Lambda functions packaged"
+echo "✅ Lambda functions packaged (without node_modules)"
 echo "   - user_search.js"
 echo "   - mapSearch.js"
 echo "   - mapSearchBackground.js"

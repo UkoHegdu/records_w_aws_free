@@ -121,6 +121,20 @@ exports.handler = async (event, context) => {
 
         const { rows: detailData } = await client.query(detailQuery);
 
+        // Get aggregate site stats
+        const siteStatsQuery = `
+            SELECT
+                (SELECT COUNT(*) FROM users) as total_users,
+                (SELECT COUNT(*) FROM notification_history WHERE notification_type = 'mapper_alert' AND status = 'sent') as total_alerts_sent,
+                (SELECT COUNT(*) FROM notification_history WHERE notification_type = 'driver_notification' AND status = 'sent') as total_driver_notifications
+        `;
+        const { rows: siteStatsRows } = await client.query(siteStatsQuery);
+        const siteStats = {
+            total_users: parseInt(siteStatsRows[0]?.total_users) || 0,
+            total_alerts_sent: parseInt(siteStatsRows[0]?.total_alerts_sent) || 0,
+            total_driver_notifications: parseInt(siteStatsRows[0]?.total_driver_notifications) || 0
+        };
+
         await client.end();
 
         // Process the data into daily summaries
@@ -193,18 +207,18 @@ exports.handler = async (event, context) => {
                 overall_status: overallStatus,
                 status_message: statusMessage,
                 stats: {
-                    total_users: totalUsers,
+                    total_users: parseInt(totalUsers) || 0,
                     mapper_alerts: {
-                        successful: mapperDay?.successful_mapper_alerts || 0,
-                        no_new_times: mapperDay?.no_new_times_mapper_alerts || 0,
-                        errors: mapperDay?.error_mapper_alerts || 0,
-                        total_records: mapperDay?.total_mapper_records || 0
+                        successful: parseInt(mapperDay?.successful_mapper_alerts) || 0,
+                        no_new_times: parseInt(mapperDay?.no_new_times_mapper_alerts) || 0,
+                        errors: parseInt(mapperDay?.error_mapper_alerts) || 0,
+                        total_records: parseInt(mapperDay?.total_mapper_records) || 0
                     },
                     driver_notifications: {
-                        successful: driverDay?.successful_driver_notifications || 0,
-                        no_new_times: driverDay?.no_new_times_driver_notifications || 0,
-                        errors: driverDay?.error_driver_notifications || 0,
-                        total_notifications: driverDay?.total_driver_notifications || 0
+                        successful: parseInt(driverDay?.successful_driver_notifications) || 0,
+                        no_new_times: parseInt(driverDay?.no_new_times_driver_notifications) || 0,
+                        errors: parseInt(driverDay?.error_driver_notifications) || 0,
+                        total_notifications: parseInt(driverDay?.total_driver_notifications) || 0
                     }
                 },
                 user_breakdown: Object.values(userBreakdown)
@@ -221,7 +235,8 @@ exports.handler = async (event, context) => {
             },
             body: JSON.stringify({
                 message: 'Admin daily overview retrieved successfully',
-                daily_summaries: dailySummaries
+                daily_summaries: dailySummaries,
+                site_stats: siteStats
             })
         };
     } catch (error) {

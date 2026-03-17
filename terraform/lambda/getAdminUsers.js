@@ -66,18 +66,19 @@ exports.handler = async (event, context) => {
 
         // Get all users with their alert information
         const query = `
-            SELECT 
+            SELECT
                 u.id,
                 u.username,
                 u.tm_username,
                 u.email,
                 u.created_at,
                 a.alert_type,
-                a.map_count,
-                a.created_at as alert_created_at
+                a.created_at as alert_created_at,
+                COUNT(am.mapid) as map_count
             FROM users u
             LEFT JOIN alerts a ON u.id = a.user_id
-            WHERE u.role = 'user'
+            LEFT JOIN alert_maps am ON a.id = am.alert_id
+            GROUP BY u.id, u.username, u.tm_username, u.email, u.created_at, a.alert_type, a.created_at
             ORDER BY u.created_at DESC
         `;
 
@@ -91,7 +92,7 @@ exports.handler = async (event, context) => {
             email: row.email,
             created_at: row.created_at,
             alert_type: row.alert_type || 'none',
-            map_count: row.map_count || 0,
+            map_count: parseInt(row.map_count) || 0,
             alert_created_at: row.alert_created_at
         }));
 

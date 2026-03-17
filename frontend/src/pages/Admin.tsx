@@ -106,13 +106,13 @@ const Admin: React.FC = () => {
 
             const response = await apiClient.get('/api/v1/admin/config');
             const data = response.data;
-            setConfigs(data.configs);
+            const hidden = ['max_driver_notifications', 'trackmania_api_monthly_limit'];
+            setConfigs(data.configs.filter((c: ConfigValue) => !hidden.includes(c.config_key)));
         } catch (error) {
             console.error('Error loading configs:', error);
             // Fallback to mock data if API fails
             const mockConfigs: ConfigValue[] = [
                 { config_key: 'max_maps_per_user', config_value: '200', description: 'Maximum number of maps a user can add to their watch list' },
-                { config_key: 'max_driver_notifications', config_value: '200', description: 'Maximum number of driver notifications per user (optimized with position API)' },
                 { config_key: 'max_users_registration', config_value: '100', description: 'Maximum number of users that can register on the site' },
                 { config_key: 'max_new_records_per_map', config_value: '20', description: 'Maximum new records per map before truncating in email' }
             ];
@@ -430,12 +430,11 @@ const Admin: React.FC = () => {
                 </div>
 
                 {/* Configuration Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     {configs.map((config) => (
                         <div key={config.config_key} className="racing-card">
                             <div className="flex items-center gap-3 mb-4">
                                 {config.config_key === 'max_maps_per_user' && <MapPin className="w-5 h-5 text-blue-500" />}
-                                {config.config_key === 'max_driver_notifications' && <Bell className="w-5 h-5 text-green-500" />}
                                 {config.config_key === 'max_users_registration' && <Users className="w-5 h-5 text-purple-500" />}
                                 {config.config_key === 'max_new_records_per_map' && <Shield className="w-5 h-5 text-orange-500" />}
                                 <h3 className="font-semibold text-foreground capitalize">
@@ -461,40 +460,6 @@ const Admin: React.FC = () => {
                             </div>
                         </div>
                     ))}
-                </div>
-
-                {/* API Usage and Limits */}
-                <div className="racing-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5" />
-                        API Usage & Limits
-                    </h2>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="text-center">
-                            <div className="text-2xl font-bold text-green-500 mb-1">2,400</div>
-                            <div className="text-sm text-muted-foreground">Daily API Calls</div>
-                        </div>
-
-                        <div className="text-center">
-                            <div className="text-2xl font-bold text-blue-500 mb-1">20 min</div>
-                            <div className="text-sm text-muted-foreground">Processing Time</div>
-                        </div>
-
-                        <div className="text-center">
-                            <div className="text-2xl font-bold text-green-500 mb-1">Well Within Limits</div>
-                            <div className="text-sm text-muted-foreground">API Limit Status</div>
-                        </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-muted/50 rounded-xl">
-                        <h3 className="font-semibold mb-2">Usage Projection</h3>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                            <p>• 100 users × 200 maps = 20,000 requests/day</p>
-                            <p>• Sequential processing: 20,000 ÷ 2 req/sec = 20 minutes</p>
-                            <p>• Monthly API calls: 72,000 (well within 5M limit)</p>
-                        </div>
-                    </div>
                 </div>
 
                 {/* Tab Navigation */}

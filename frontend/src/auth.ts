@@ -55,6 +55,12 @@ apiClient.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
+        // Don't try refresh on login/register - those 401s mean bad credentials, not expired token
+        const isAuthRequest = /\/api\/v1\/users\/(login|register)$/.test(originalRequest?.url || '');
+        if (isAuthRequest) {
+            return Promise.reject(error);
+        }
+
         // If error is 401 and we haven't already tried to refresh
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;

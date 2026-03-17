@@ -161,7 +161,7 @@ async function formatNewRecords(records) {
                 const date = new Date(entry.timestamp * 1000).toLocaleString();
 
                 formatted += `  🏎️ Player: ${playerName}\n`;
-                formatted += `  📍 Zone: ${entry.zoneName}\n`;
+                formatted += `  🌍 Zone: ${entry.zoneName}\n`;
                 formatted += `  🥇 Position: ${entry.position}\n`;
                 formatted += `  📅 Date: ${date}\n\n`;
             }
